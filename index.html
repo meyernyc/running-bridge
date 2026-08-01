@@ -98,44 +98,66 @@
         document.getElementById('status').innerText = msg;
     }
 
-    async function initializeBridge() {
+let engoConnected = false;
+
+async function initializeBridge() {
+    const btn = document.querySelector('button');
+
+    if (!engoConnected) {
+        // --- Phase 1: Connect Engo Glasses ---
         try {
-            // 1. Establish Secure Connection to Engo 3 Smart Glasses
             updateStatus("Scanning for Engo 3 Glasses...");
             const engoDevice = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'ENGO' }],
                 optionalServices: [ENGO_SERVICE_UUID]
             });
-           
+            
             updateStatus("Connecting to Engo 3 display engine...");
             const engoServer = await engoDevice.gatt.connect();
             const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
             engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
-           
-            // 2. Establish Connection to the Stryd Footpod
-            updateStatus("Engo linked! Scanning for Stryd Footpod...");
+            
+            engoConnected = true;
+            
+            // Update UI for the second click
+            btn.innerText = "Step 2: Connect Stryd Footpod";
+            btn.style.backgroundColor = "#00b0ff"; // Optional: change color to indicate next step
+            updateStatus("Engo linked! Click the button again to connect the Stryd pod.");
+            
+        } catch (error) {
+            updateStatus("Engo Connection Error: " + error.message);
+            console.error(error);
+        }
+    } else {
+        // --- Phase 2: Connect Stryd Footpod ---
+        try {
+            updateStatus("Scanning for Stryd Footpod...");
             const strydDevice = await navigator.bluetooth.requestDevice({
                 filters: [{ namePrefix: 'Stryd' }],
                 optionalServices: ['running_speed_and_cadence']
             });
-           
+            
             updateStatus("Connecting to Stryd data stream...");
             const strydServer = await strydDevice.gatt.connect();
             const strydService = await strydServer.getPrimaryService('running_speed_and_cadence');
             const rscMeasurementChar = await strydService.getCharacteristic('rsc_measurement');
-           
-            // 3. Bind Event Listeners for Live Sub-Second Transmission Loops
+            
             await rscMeasurementChar.startNotifications();
             rscMeasurementChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
-           
-            updateStatus("Bridge Active! Put your phone away and start running.");
-           
+            
+            // Update UI for final active state
+            btn.innerText = "Running...";
+            btn.style.backgroundColor = "#333";
+            btn.style.color = "#00e676";
+            btn.disabled = true; // Prevent further clicks
+            updateStatus("Bridge Active! Put your device away and start your run.");
+            
         } catch (error) {
-            updateStatus("Connection Error: " + error.message);
+            updateStatus("Stryd Connection Error: " + error.message);
             console.error(error);
         }
     }
-
+}
     function processIncomingStrydData(event) {
         let dataView = event.target.value;
        
