@@ -1,209 +1,174 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stryd to Engo 3 Bridge</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #121212;
-            color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        h1 { color: #00e676; margin-bottom: 10px; font-size: 24px; }
-        .card {
-            background-color: #1e1e1e;
-            border-radius: 12px;
-            padding: 24px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            text-align: center;
-        }
-        button {
-            background-color: #00e676;
-            color: #121212;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 15px;
-            transition: background-color 0.2s;
-        }
-        button:active { background-color: #00b359; }
-        #status {
-            margin-top: 20px;
-            font-size: 14px;
-            color: #b0bec5;
-            line-height: 1.5;
-            min-height: 42px;
-        }
-        .metric-preview {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-top: 25px;
-            border-top: 1px solid #333;
-            padding-top: 20px;
-        }
-        .metric-box { background: #262626; padding: 10px; border-radius: 6px; }
-        .metric-val { font-size: 18px; font-weight: bold; color: #00e676; margin-top: 5px; }
-        .metric-lbl { font-size: 11px; color: #aaa; text-transform: uppercase; }
-    </style>
-</head>
-<body>
+// Global tracking variables for the device connection layer
+let engoRxCharacteristic = null;
+let strydServiceChar = null;
 
-<div class="card">
-    <h1>Heads-Up Bridge</h1>
-    <p style="font-size: 13px; color: #aaa;">Pairs Stryd & Engo 3 to stream metrics natively via Chrome</p>
-   
-    <button onclick="initializeBridge()">Connect & Start Run</button>
-   
-    <div id="status">Status: Disconnected. Ready to scan.</div>
+// Core Service and Data Channel Blueprint Constants
+const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
+const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d24a5cb7';
+const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; // Standard Bluetooth SIG Profile
+const RSC_CHAR_UUID     = 'rsc_measurement';
 
-    <div class="metric-preview">
-        <div class="metric-box">
-            <div class="metric-lbl">Power</div>
-            <div id="view-pwr" class="metric-val">-- W</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-lbl">Pace</div>
-            <div id="view-pce" class="metric-val">--:--</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-lbl">Distance</div>
-            <div id="view-dst" class="metric-val">-- mi</div>
-        </div>
-    </div>
-</div>
-
-<script>
-    let engoRxCharacteristic = null;
-    const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
-    const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d24a5cb7';
-
-    function updateStatus(msg) {
-        document.getElementById('status').innerText = msg;
+/**
+* Visual feedback logger to keep you updated on progress directly in the web page interface.
+*/
+function updateStatus(msg) {
+    const statusElement = document.getElementById('status');
+    if (statusElement) {
+        statusElement.innerText = msg;
     }
+    console.log("[Bridge Log]: " + msg);
+}
 
-    async function initializeBridge() {
+/**
+* Initializes the dual Bluetooth connection pipeline.
+* Binds your phone as a Central BLE hub talking to both endpoints simultaneously.
+*/
+async function initializeBridge() {
+    try {
+        // 1. Scan and link to your Engo 3 Smart Glasses
+        updateStatus("Scanning for Engo 3 Glasses...");
+        const engoDevice = await navigator.bluetooth.requestDevice({
+            filters: [
+                { namePrefix: 'ENGO' },
+                { namePrefix: 'engo' }
+            ],
+            optionalServices: [ENGO_SERVICE_UUID]
+        });
+       
+        updateStatus("Glasses found. Connecting to ActiveLook engine...");
+        const engoServer = await engoDevice.gatt.connect();
+        const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
+        engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
+       
+        // 2. Scan and link to your Stryd Footpod with broad fallback validation profiles
+        updateStatus("Engo connected! Scanning for Stryd Footpod (Shake pod to wake)...");
+        const strydDevice = await navigator.bluetooth.requestDevice({
+            filters: [
+                { namePrefix: 'Stryd' },
+                { namePrefix: 'STRYD' },
+                { namePrefix: 'stryd' }
+            ],
+            optionalServices: [
+                RSC_SERVICE_UUID,
+                '00001814-0000-1000-8000-00805f9b34fb', // Explicit 16-bit RSC Service layout
+                'cycling_power'                         // Alternative metric broadcast layout
+            ]
+        });
+       
+        updateStatus("Footpod found. Accessing Running Speed & Cadence characteristics...");
+        const strydServer = await strydDevice.gatt.connect();
+       
+        // Try getting the service via standard alias name, fallback to numeric short-string if needed
+        let strydService;
         try {
-            // 1. Establish Secure Connection to Engo 3 Smart Glasses
-            updateStatus("Scanning for Engo 3 Glasses...");
-            const engoDevice = await navigator.bluetooth.requestDevice({
-                filters: [{ namePrefix: 'ENGO' }],
-                optionalServices: [ENGO_SERVICE_UUID]
-            });
-           
-            updateStatus("Connecting to Engo 3 display engine...");
-            const engoServer = await engoDevice.gatt.connect();
-            const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
-            engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
-           
-            // 2. Establish Connection to the Stryd Footpod
-            updateStatus("Engo linked! Scanning for Stryd Footpod...");
-            const strydDevice = await navigator.bluetooth.requestDevice({
-                filters: [{ namePrefix: 'Stryd' }],
-                optionalServices: ['running_speed_and_cadence']
-            });
-           
-            updateStatus("Connecting to Stryd data stream...");
-            const strydServer = await strydDevice.gatt.connect();
-            const strydService = await strydServer.getPrimaryService('running_speed_and_cadence');
-            const rscMeasurementChar = await strydService.getCharacteristic('rsc_measurement');
-           
-            // 3. Bind Event Listeners for Live Sub-Second Transmission Loops
-            await rscMeasurementChar.startNotifications();
-            rscMeasurementChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
-           
-            updateStatus("Bridge Active! Put your phone away and start running.");
-           
-        } catch (error) {
-            updateStatus("Connection Error: " + error.message);
-            console.error(error);
+            strydService = await strydServer.getPrimaryService(RSC_SERVICE_UUID);
+        } catch (e) {
+            strydService = await strydServer.getPrimaryService('00001814-0000-1000-8000-00805f9b34fb');
         }
+       
+        strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
+       
+        // 3. Activate the asynchronous sub-second real-time notification stream
+        updateStatus("Binding live telemetry listeners...");
+        await strydServiceChar.startNotifications();
+        strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
+       
+        updateStatus("Bridge fully active! Ready to run.");
+       
+    } catch (error) {
+        updateStatus("Connection Failure: " + error.message);
+        updateStatus("Make sure the pod isn't connected to your watch or official app.");
     }
+}
 
-    function processIncomingStrydData(event) {
-        let dataView = event.target.value;
-       
-        // Read byte flags to identify array properties
-        let flags = dataView.getUint8(0);
-        let totalDistancePresent = flags & 0x02;
-       
-        let byteOffset = 1;
-       
-        // Calculate Pace: Read speed uint16 (meters per second scaled by 1/256)
-        let rawSpeed = dataView.getUint16(byteOffset, true);
+/**
+* Handles incoming binary packets coming directly from the Stryd pod hardware layer.
+* Deciphers the custom flags, calculates true running pace, shifts byte positions,
+* extracts total miles, grabs the watt value, and updates the canvas.
+*/
+function processIncomingStrydData(event) {
+    let dataView = event.target.value; // This is a standard JavaScript DataView object
+   
+    // Byte 0: Feature configuration array flags
+    let flags = dataView.getUint8(0);
+    let strideLengthPresent = flags & 0x01;
+    let totalDistancePresent = flags & 0x02;
+   
+    let byteOffset = 1;
+   
+    // 1. Calculate Live Running Pace
+    // Speed is stored as an unsigned 16-bit integer (2 bytes) scaled by 1/256 in meters per second
+    let rawSpeed = dataView.getUint16(byteOffset, true);
+    byteOffset += 2;
+   
+    let speedMps = rawSpeed / 256;
+    let paceStr = "--:--";
+   
+    if (speedMps > 0.447) { // Only calculate true pace if moving faster than 1 mph to avoid infinity bounds
+        let mph = speedMps * 2.23694;
+        let decimalPace = 60 / mph;
+        let paceMin = Math.floor(decimalPace);
+        let paceSec = Math.floor((decimalPace - paceMin) * 60).toString().padStart(2, '0');
+        paceStr = `${paceMin}:${paceSec}`;
+    }
+   
+    // 2. Shift past basic Cadence tracking metrics (1 byte)
+    byteOffset += 1;
+   
+    // 3. Shift past Stride Length if flag index is checked (2 bytes)
+    if (strideLengthPresent) {
         byteOffset += 2;
-       
-        let speedMps = rawSpeed / 256;
-        let paceStr = "--:--";
-        if (speedMps > 0.5) { // Ensure you are actively walking/running to avoid zero division
-            let mph = speedMps * 2.23694;
-            let decimalPace = 60 / mph;
-            let paceMin = Math.floor(decimalPace);
-            let paceSec = Math.floor((decimalPace - paceMin) * 60).toString().padStart(2, '0');
-            paceStr = `${paceMin}:${paceSec}`;
-        }
-       
-        // Skip over Cadence (1 byte)
-        byteOffset += 1;
-       
-        // Skip over Stride Length if flag is present (2 bytes)
-        if (flags & 0x01) { byteOffset += 2; }
-       
-        // Calculate Accumulated Distance: Read total distance uint32 (meters scaled by 1/10)
-        let distanceMiles = "0.00";
-        if (totalDistancePresent) {
-            let totalMeters = dataView.getUint32(byteOffset, true) / 10;
-            distanceMiles = (totalMeters * 0.000621371).toFixed(2);
-            byteOffset += 4;
-        }
-       
-        // Calculate Power: Read Stryd custom trailing data block layout
-        let powerWatts = 0;
-        if (byteOffset < dataView.byteLength) {
-            powerWatts = dataView.getUint16(byteOffset, true);
-        }
-       
-        // Update Local Browser Screen Display
-        document.getElementById('view-pwr').innerText = `${powerWatts} W`;
-        document.getElementById('view-pce').innerText = paceStr;
-        document.getElementById('view-dst').innerText = `${distanceMiles} mi`;
-       
-        // Format and transmit ActiveLook text placement scripts straight down the BLE channel
-        pushLayoutToGlasses(powerWatts, paceStr, distanceMiles);
     }
-
-    async function pushLayoutToGlasses(pwr, pce, dst) {
-        if (!engoRxCharacteristic) return;
-       
-        // Clear frame and write coordinates cleanly down the pipeline to separate items vertically
-        let commands = `clear\ntext 10 20 "${pwr} W"\ntext 10 50 "${pce}"\ntext 10 80 "${dst} mi"\n`;
-       
-        try {
-            let stringEncoder = new TextEncoder();
-            let encodedBytes = stringEncoder.encode(commands);
-           
-            // Native C++ Chrome level write request bypassing standard macro execution delays
-            await engoRxCharacteristic.writeValueWithResponse(encodedBytes);
-        } catch (bleWriteError) {
-            console.warn("Frame dropped: " + bleWriteError.message);
-        }
+   
+    // 4. Extract Total Accumulated Run Distance
+    // Distance tracking is stored as a 32-bit unsigned integer (4 bytes) scaled by 1/10 in meters
+    let distanceMiles = "0.00";
+    if (totalDistancePresent) {
+        let totalMeters = dataView.getUint32(byteOffset, true) / 10;
+        distanceMiles = (totalMeters * 0.000621371).toFixed(2);
+        byteOffset += 4;
     }
-</script>
+   
+    // 5. Parse Real-Time Running Power
+    // Stryd safely injects raw power (watts) as a Uint16 at the trailing offset of the standard array payload
+    let powerWatts = 0;
+    if (byteOffset < dataView.byteLength) {
+        powerWatts = dataView.getUint16(byteOffset, true);
+    }
+   
+    // 6. Push values directly onto the phone's web dashboard layout fields
+    document.getElementById('view-pwr').innerText = `${powerWatts} W`;
+    document.getElementById('view-pce').innerText = paceStr;
+    document.getElementById('view-dst').innerText = `${distanceMiles} mi`;
+   
+    // 7. Hand parameters down to the ActiveLook glass rendering encoder
+    pushLayoutToGlasses(powerWatts, paceStr, distanceMiles);
+}
 
-</body>
-</html>
+/**
+* Formats data strings into ActiveLook API clear-and-text parameters
+* and pushes them out via an active Bluetooth transmission loop.
+*/
+async function pushLayoutToGlasses(pwr, pce, dst) {
+    // Gracefully exit if the glasses characteristic hasn't initialized yet
+    if (!engoRxCharacteristic) return;
+   
+    // Assemble layout rows. Text positioning uses a grid structure: text [X-coordinate] [Y-coordinate] "[String]"
+    let commands =
+        `clear\n` +
+        `text 10 20 "PWR: ${pwr} W"\n` +
+        `text 10 50 "PCE: ${pce}"\n` +
+        `text 10 80 "DST: ${dst} mi"\n`;
+   
+    try {
+        let stringEncoder = new TextEncoder();
+        let encodedBytes = stringEncoder.encode(commands);
+       
+        // Push raw compiled array straight to the glass display plane buffer
+        await engoRxCharacteristic.writeValueWithResponse(encodedBytes);
+    } catch (bleWriteError) {
+        console.warn("Frame transmission dropped: " + bleWriteError.message);
+    }
+}
+
+ 
