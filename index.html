@@ -9,6 +9,7 @@
         .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
         .metric { text-align: left; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
+        #view-pwr { font-size: 36px; } /* Increased font size for web dashboard power number */
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
         .metric-subtext { font-size: 10px; color: #777; margin-top: 4px; }
         
@@ -27,7 +28,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.27 (Power Range Displayed)</span> 🌟</h2>
+    <h2>Engo 3 Setup <span class="version">v2.28 (Increased Power Font)</span> 🌟</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -450,9 +451,9 @@ async function updateUI() {
             await engoRxCharacteristic.writeValueWithResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // Main Power text value in center (Shifted up slightly to Y=216)
+        // Main Power text value in center (Font increased to 0x05)
         await engoRxCharacteristic.writeValueWithResponse(
-            createActiveLookColorTextCmd(152, 216, `${currentPower} W`, 0x04, powerColor)
+            createActiveLookColorTextCmd(152, 216, `${currentPower} W`, 0x05, powerColor)
         );
         
         // Power range text displayed underneath the power number (Y=246, smaller font)
