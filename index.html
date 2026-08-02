@@ -83,7 +83,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v3.00 (ENGO 3 Color Update)</span></h2>
+    <h2>Run HUD Setup <span class="version">v3.01 (Bug Fix)</span></h2>
     
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
@@ -129,18 +129,18 @@
         const CP_SERVICE_UUID = 'cycling_power';
         const CP_CHAR_UUID = 'cycling_power_measurement';
 
-        // Core Layout Management
+        // Layout Controls
         const CMD_CLEAR = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
         const CMD_HOLD_ON = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]);
         const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]);
 
-        // ActiveLook 3.0 Global Color Selection States (Command ID: 0x3E)
-        // Adjusts the color engine before painting shapes or text strings
+        // ActiveLook 3.0 Global Colors
         const CMD_COLOR_GREEN  = new Uint8Array([0xFF, 0x3E, 0x00, 0x06, 0x00, 0xAA]);
         const CMD_COLOR_YELLOW = new Uint8Array([0xFF, 0x3E, 0x00, 0x06, 0x03, 0xAA]);
         const CMD_COLOR_ORANGE = new Uint8Array([0xFF, 0x3E, 0x00, 0x06, 0x04, 0xAA]);
         const CMD_COLOR_RED    = new Uint8Array([0xFF, 0x3E, 0x00, 0x06, 0x06, 0xAA]);
 
+        // REPAIRED: Clean byte indices prevent array object mutation errors
         function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
             let textBytes = new TextEncoder().encode(text);
             let totalLen = 13 + textBytes.length;
@@ -196,11 +196,9 @@
                 const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
                 engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
 
-                // Setup default screen state
                 await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
                 await delay(100);
                 
-                // Alert starting setup in default high visibility green
                 await engoRxCharacteristic.writeValueWithResponse(CMD_COLOR_GREEN);
                 await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(152, 226, "LINKED"));
                 await delay(50);
@@ -222,7 +220,7 @@
                     filters: [{ namePrefix: 'Stryd' }, { namePrefix: 'STRYD' }, { namePrefix: 'stryd' }],
                     optionalServices: [
                         RSC_SERVICE_UUID,
-                        '00001814-00001000-8000-00805f9b34fb',
+                        '00001814-0000-1000-8000-00805f9b34fb',
                         CP_SERVICE_UUID
                     ]
                 });
@@ -258,3 +256,6 @@
         }
 
         function processIncomingRSC(event) {
+            let dataView = event.target.value;
+            let flags = dataView.getUint8(0);
+            let strideLengthPresent = flags & 0x01;
