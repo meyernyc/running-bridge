@@ -12,7 +12,7 @@
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
         button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:active { background-color: #1976D2; }
-        #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
+        #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -37,22 +37,21 @@
     </div>
 
 <script>
-// Global tracking variables for the device connection layer
+// Global tracking variables
 let engoDevice = null;
 let strydDevice = null;
 let engoRxCharacteristic = null;
 let strydServiceChar = null;
 let isEngoCanvasCleared = false; 
 
-// Core Service and Data Channel Blueprint Constants
+// Core Service Constants
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
-const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; // Corrected ActiveLook RX UUID
+const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
 const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; 
 const RSC_CHAR_UUID     = 'rsc_measurement';
 
-/**
- * Visual feedback logger
- */
+const delay = ms => new Promise(res => setTimeout(res, ms));
+
 function updateStatus(msg) {
     const statusElement = document.getElementById('status');
     if (statusElement) {
@@ -62,46 +61,85 @@ function updateStatus(msg) {
 }
 
 /**
- * Helper to pause execution
+ * A highly resilient connection manager that handles OS-level GATT drops.
  */
-const delay = ms => new Promise(res => setTimeout(res, ms));
+async function robustConnect(device, primaryServiceUUID, charUUID, deviceName, fallbackServiceUUID = null) {
+    let retries = 5;
+    for (let i = 0; i < retries; i++) {
+        try {
+            updateStatus(`Connecting to ${deviceName} (Attempt ${i + 1}/${retries})...`);
+            
+            // Clean slate: if the OS thinks it's connected from a ghost session, disconnect it first
+            if (device.gatt.connected) {
+                device.gatt.disconnect();
+                await delay(500);
+            }
+
+            const server = await device.gatt.connect();
+            await delay(1000); // Crucial wait time for the OS to finalize the connection
+
+            // Check if the connection dropped in the background during the delay
+            if (!device.gatt.connected) {
+                throw new Error("Connection dropped during stabilization.");
+            }
+
+            let service;
+            try {
+                service = await server.getPrimaryService(primaryServiceUUID);
+            } catch (e) {
+                if (fallbackServiceUUID) {
+                    service = await server.getPrimaryService(fallbackServiceUUID);
+                } else {
+                    throw e;
+                }
+            }
+
+            const characteristic = await service.getCharacteristic(charUUID);
+            return characteristic;
+
+        } catch (error) {
+            console.warn(`${deviceName} connection failed: ${error.message}`);
+            if (i === retries - 1) {
+                throw new Error(`Failed to securely connect to ${deviceName}.`);
+            }
+            await delay(1500);
+        }
+    }
+}
 
 /**
- * Initializes the dual Bluetooth connection pipeline.
+ * Initializes the dual Bluetooth connection pipeline safely.
  */
 async function initializeBridge() {
     try {
-        // 1. Scan and link to your Engo 3 Smart Glasses
+        // 1. Setup Engo Glasses
         updateStatus("Scanning for Engo 3 Glasses...");
         engoDevice = await navigator.bluetooth.requestDevice({
-            filters: [
-                { namePrefix: 'ENGO' },
-                { namePrefix: 'engo' },
-                { namePrefix: 'A.LooK' }
-            ],
+            filters: [{ namePrefix: 'ENGO' }, { namePrefix: 'engo' }, { namePrefix: 'A.LooK' }],
             optionalServices: [ENGO_SERVICE_UUID]
         });
         
-        engoDevice.addEventListener('gattserverdisconnected', onEngoDisconnected);
-        await connectEngo();
+        engoRxCharacteristic = await robustConnect(engoDevice, ENGO_SERVICE_UUID, ENGO_CHAR_UUID, "Engo Glasses");
+        isEngoCanvasCleared = false; 
         
-        // 2. Scan and link to your Stryd Footpod
+        // ONLY attach the disconnect listener after a completely successful binding
+        engoDevice.addEventListener('gattserverdisconnected', onEngoDisconnected);
+        
+        // 2. Setup Stryd Pod
         updateStatus("Glasses connected! Scanning for Stryd Footpod (Shake pod to wake)...");
         strydDevice = await navigator.bluetooth.requestDevice({
-            filters: [
-                { namePrefix: 'Stryd' },
-                { namePrefix: 'STRYD' },
-                { namePrefix: 'stryd' }
-            ],
-            optionalServices: [
-                RSC_SERVICE_UUID,
-                '00001814-0000-1000-8000-00805f9b34fb', 
-                'cycling_power'                         
-            ]
+            filters: [{ namePrefix: 'Stryd' }, { namePrefix: 'STRYD' }, { namePrefix: 'stryd' }],
+            optionalServices: [RSC_SERVICE_UUID, '00001814-0000-1000-8000-00805f9b34fb', 'cycling_power']
         });
         
+        strydServiceChar = await robustConnect(strydDevice, RSC_SERVICE_UUID, RSC_CHAR_UUID, "Stryd Pod", '00001814-0000-1000-8000-00805f9b34fb');
+        
+        // ONLY attach the disconnect listener after a completely successful binding
         strydDevice.addEventListener('gattserverdisconnected', onStrydDisconnected);
-        await connectStryd();
+        
+        // 3. Start Data Stream
+        await strydServiceChar.startNotifications();
+        strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
         
         updateStatus("Bridge fully active! Ready to run.");
         
@@ -110,85 +148,27 @@ async function initializeBridge() {
     }
 }
 
-/**
- * Helper to connect/reconnect to Engo Glasses with retry logic for GATT drops
- */
-async function connectEngo(retries = 5) {
-    updateStatus("Connecting to ActiveLook engine...");
-    for (let i = 0; i < retries; i++) {
-        try {
-            const engoServer = await engoDevice.gatt.connect();
-            await delay(1000); // Give the OS time to establish the GATT DB
-            const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
-            engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
-            isEngoCanvasCleared = false; 
-            return; // Success
-        } catch (error) {
-             updateStatus(`Engo GATT fetch failed, retrying (${i+1}/${retries})...`);
-             await delay(1500);
-        }
-    }
-    throw new Error("Failed to fetch Engo GATT services after multiple attempts.");
-}
-
-/**
- * Helper to connect/reconnect to Stryd Pod with retry logic for GATT drops
- */
-async function connectStryd(retries = 5) {
-    updateStatus("Connecting to Stryd Footpod...");
-    for (let i = 0; i < retries; i++) {
-        try {
-            const strydServer = await strydDevice.gatt.connect();
-            await delay(1000);
-            
-            let strydService;
-            try {
-                strydService = await strydServer.getPrimaryService(RSC_SERVICE_UUID);
-            } catch (e) {
-                strydService = await strydServer.getPrimaryService('00001814-0000-1000-8000-00805f9b34fb');
-            }
-            
-            strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
-            await strydServiceChar.startNotifications();
-            strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
-            return; // Success
-        } catch (error) {
-             updateStatus(`Stryd GATT fetch failed, retrying (${i+1}/${retries})...`);
-             await delay(1500);
-        }
-    }
-     throw new Error("Failed to fetch Stryd GATT services after multiple attempts.");
-}
-
-/**
- * Auto-reconnect handler for Engo Glasses
- */
 async function onEngoDisconnected() {
     updateStatus("Engo Glasses disconnected. Attempting to reconnect...");
     try {
-        await connectEngo();
+        engoRxCharacteristic = await robustConnect(engoDevice, ENGO_SERVICE_UUID, ENGO_CHAR_UUID, "Engo Glasses");
+        isEngoCanvasCleared = false;
         updateStatus("Engo Glasses reconnected successfully.");
     } catch (error) {
         updateStatus("Could not reconnect to Engo Glasses. Please manually restart.");
     }
 }
 
-/**
- * Auto-reconnect handler for Stryd Pod
- */
 async function onStrydDisconnected() {
     updateStatus("Stryd Pod disconnected. Attempting to reconnect...");
     try {
-        await connectStryd();
+        strydServiceChar = await robustConnect(strydDevice, RSC_SERVICE_UUID, RSC_CHAR_UUID, "Stryd Pod", '00001814-0000-1000-8000-00805f9b34fb');
         updateStatus("Stryd Pod reconnected successfully.");
     } catch (error) {
         updateStatus("Could not reconnect to Stryd Pod. Please manually restart.");
     }
 }
 
-/**
- * Handles incoming binary packets coming directly from the Stryd pod hardware layer.
- */
 function processIncomingStrydData(event) {
     let dataView = event.target.value;
     
@@ -198,7 +178,6 @@ function processIncomingStrydData(event) {
     
     let byteOffset = 1;
     
-    // 1. Calculate Live Running Pace
     let rawSpeed = dataView.getUint16(byteOffset, true);
     byteOffset += 2;
     
@@ -213,15 +192,12 @@ function processIncomingStrydData(event) {
         paceStr = `${paceMin}:${paceSec}`;
     }
     
-    // 2. Shift past basic Cadence tracking metrics
     byteOffset += 1;
     
-    // 3. Shift past Stride Length if flag index is checked
     if (strideLengthPresent) {
         byteOffset += 2;
     }
     
-    // 4. Extract Total Accumulated Run Distance
     let distanceMiles = "0.00";
     if (totalDistancePresent) {
         let totalMeters = dataView.getUint32(byteOffset, true) / 10;
@@ -229,24 +205,18 @@ function processIncomingStrydData(event) {
         byteOffset += 4;
     }
     
-    // 5. Parse Real-Time Running Power
     let powerWatts = 0;
     if (byteOffset < dataView.byteLength) {
         powerWatts = dataView.getUint16(byteOffset, true);
     }
     
-    // 6. Push values directly onto the phone's web dashboard
     document.getElementById('view-pwr').innerText = `${powerWatts} W`;
     document.getElementById('view-pce').innerText = paceStr;
     document.getElementById('view-dst').innerText = `${distanceMiles} mi`;
     
-    // 7. Hand parameters down to the ActiveLook glass rendering encoder
     pushLayoutToGlasses(powerWatts, paceStr, distanceMiles);
 }
 
-/**
- * Formats data strings into ActiveLook API text parameters.
- */
 async function pushLayoutToGlasses(pwr, pce, dst) {
     if (!engoRxCharacteristic) return;
     
@@ -269,8 +239,6 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
     try {
         let stringEncoder = new TextEncoder();
         let encodedBytes = stringEncoder.encode(commands);
-        // The RX server allows both Bluetooth WRITE (with response) and WRITE_NO_RESPONSE mode. 
-        // It is highly recommended to use WRITE (with response) mode.
         await engoRxCharacteristic.writeValueWithResponse(encodedBytes);
     } catch (bleWriteError) {
         console.warn("Frame transmission dropped: " + bleWriteError.message);
