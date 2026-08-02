@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.10 (Moving Time Added)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.11 (Bottom Font Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -250,7 +250,6 @@ function processIncomingRSC(event) {
         pwrRSC = dataView.getUint16(byteOffset, true);
     }
     
-    // Updated condition to allow zero power (>= 0)
     if (pwrRSC >= 0 && speedMps > 0.447) {
         currentPower = pwrRSC;
     }
@@ -262,7 +261,6 @@ function processIncomingCP(event) {
     let dataView = event.target.value;
     if (dataView.byteLength >= 4) {
         let pwrCP = dataView.getInt16(2, true);
-        // Updated condition to allow zero power (>= 0)
         if (pwrCP >= 0) {
             currentPower = pwrCP;
         }
@@ -288,12 +286,12 @@ async function updateUI() {
         const startX = 152;
         
         // Top Half Display (Power value + units)
-        // Using fontId 0x04 (Font 4 - 75px spacing) to increase the size!
+        // Using fontId 0x04 (Font 4 - 75px spacing) to keep it nice and large
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
         
         // Bottom Half Display (Distance value + units + moving time)
-        // Kept at default fontId (0x02)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`));
+        // Set fontId to 0x01 (Font 1) to shrink text and prevent clipping!
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
