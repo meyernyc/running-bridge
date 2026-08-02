@@ -8,7 +8,7 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
         .dashboard { display: flex; justify-content: space-between; margin-top: 30px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
         .metric { text-align: left; }
-        .metric-value { font-size: 24px; font-weight: bold; transition: color 0.3s ease; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
         button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:active { background-color: #1976D2; }
@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.10 (Color Enabled)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.10 (Moving Time Added)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -29,16 +29,20 @@
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
         <div class="metric">
-            <div id="view-pwr" class="metric-value" style="color: #ffffff;">-- W</div>
+            <div id="view-pwr" class="metric-value">-- W</div>
             <div class="metric-label">Power</div>
         </div>
         <div class="metric">
-            <div id="view-pce" class="metric-value" style="color: #ffffff;">--:--</div>
+            <div id="view-pce" class="metric-value">--:--</div>
             <div class="metric-label">Pace</div>
         </div>
         <div class="metric">
-            <div id="view-dst" class="metric-value" style="color: #ffffff;">0.00 mi</div>
+            <div id="view-dst" class="metric-value">0.00 mi</div>
             <div class="metric-label">Distance</div>
+        </div>
+        <div class="metric">
+            <div id="view-tim" class="metric-value">0:00</div>
+            <div class="metric-label">Time</div>
         </div>
     </div>
     
@@ -56,6 +60,11 @@ let currentPace = "--:--";
 let currentDistance = "0.00";
 let isUpdatingHUD = false; 
 
+// Time tracking variables
+let movingTimeMilli = 0;
+let lastRscTime = 0;
+let currentMovingTimeStr = "0:00";
+
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
 const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; 
@@ -67,13 +76,16 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-// ActiveLook Color Palette Codes (ENGO 3)
-const AL_COLOR_WHITE   = 0x0F; 
-const AL_COLOR_RED     = 0x04;
-const AL_COLOR_GREEN   = 0x05;
-const AL_COLOR_BLUE    = 0x06;
-const AL_COLOR_YELLOW  = 0x07;
-const AL_COLOR_ORANGE  = 0x0A;
+function formatTime(ms) {
+    let totalSec = Math.floor(ms / 1000);
+    let h = Math.floor(totalSec / 3600);
+    let m = Math.floor((totalSec % 3600) / 60);
+    let s = totalSec % 60;
+    if (h > 0) {
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
@@ -92,7 +104,7 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot
     
     cmd[8] = rot & 0xFF;        
     cmd[9] = fontId & 0xFF;     
-    cmd[10] = colorVal & 0xFF;  // Dynamically uses Engo 3 Color Index
+    cmd[10] = colorVal & 0xFF;  
     
     cmd.set(textBytes, 11);
     
@@ -100,26 +112,6 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot
     cmd[totalLen - 1] = 0xAA;   
     
     return cmd;
-}
-
-// Map power zones to Engo 3 display colors
-function getPowerColorCode(power) {
-    if (power === 0) return AL_COLOR_WHITE;
-    if (power < 200) return AL_COLOR_GREEN;  // Recovery / Easy
-    if (power < 240) return AL_COLOR_BLUE;   // Aerobic Endurance
-    if (power < 280) return AL_COLOR_YELLOW; // Tempo
-    if (power < 320) return AL_COLOR_ORANGE; // Threshold
-    return AL_COLOR_RED;                     // Anaerobic
-}
-
-// Map power zones to matching web dashboard hex colors
-function getWebColorCode(power) {
-    if (power === 0) return '#ffffff';
-    if (power < 200) return '#4caf50'; // Green
-    if (power < 240) return '#2196F3'; // Blue
-    if (power < 280) return '#FFEB3B'; // Yellow
-    if (power < 320) return '#FF9800'; // Orange
-    return '#F44336';                  // Red
 }
 
 function updateStatus(msg) {
@@ -158,10 +150,9 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Show off the new color capabilities right at connection
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED", 0x02, AL_COLOR_GREEN));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd...", 0x02, AL_COLOR_YELLOW));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd..."));
         
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
         const strydBtn = document.getElementById('btn-stryd');
@@ -211,6 +202,14 @@ async function connectStrydPod() {
 }
 
 function processIncomingRSC(event) {
+    let now = Date.now();
+    if (lastRscTime === 0) lastRscTime = now;
+    let delta = now - lastRscTime;
+    
+    // Cap the delta to prevent huge time jumps if connection drops temporarily
+    if (delta > 2000) delta = 1000; 
+    lastRscTime = now;
+
     let dataView = event.target.value;
     let flags = dataView.getUint8(0);
     let strideLengthPresent = flags & 0x01;
@@ -227,10 +226,15 @@ function processIncomingRSC(event) {
         let paceMin = Math.floor(decimalPace);
         let paceSec = Math.floor((decimalPace - paceMin) * 60).toString().padStart(2, '0');
         currentPace = `${paceMin}:${paceSec}`;
+        
+        // Add to moving time when moving
+        movingTimeMilli += delta;
     } else {
         currentPace = "--:--";
         currentPower = 0; // Force 0 W when stopped!
     }
+    
+    currentMovingTimeStr = formatTime(movingTimeMilli);
     
     byteOffset += 1;
     if (strideLengthPresent) byteOffset += 2;
@@ -246,6 +250,7 @@ function processIncomingRSC(event) {
         pwrRSC = dataView.getUint16(byteOffset, true);
     }
     
+    // Updated condition to allow zero power (>= 0)
     if (pwrRSC >= 0 && speedMps > 0.447) {
         currentPower = pwrRSC;
     }
@@ -257,6 +262,7 @@ function processIncomingCP(event) {
     let dataView = event.target.value;
     if (dataView.byteLength >= 4) {
         let pwrCP = dataView.getInt16(2, true);
+        // Updated condition to allow zero power (>= 0)
         if (pwrCP >= 0) {
             currentPower = pwrCP;
         }
@@ -265,33 +271,29 @@ function processIncomingCP(event) {
 }
 
 async function updateUI() {
-    let pwrColorAL = getPowerColorCode(currentPower);
-    let pwrColorWeb = getWebColorCode(currentPower);
-
-    // 1. Update web dashboard view to match HUD colors
-    let viewPwr = document.getElementById('view-pwr');
-    viewPwr.innerText = `${currentPower} W`;
-    viewPwr.style.color = pwrColorWeb;
-    
+    // 1. Update web dashboard view
+    document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
+    document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    // 2. Update HUD
+    // 2. Update HUD (Power in top half, Distance & Time in bottom half - Centered)
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
+        // 152 is exactly half of the 304 pixel wide display
         const startX = 152;
         
         // Top Half Display (Power value + units)
-        // Passes `pwrColorAL` dynamically to the command generator!
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04, pwrColorAL));
+        // Using fontId 0x04 (Font 4 - 75px spacing) to increase the size!
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
         
-        // Bottom Half Display (Distance value + units)
-        // Explicitly set to AL_COLOR_WHITE
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi`, 0x02, AL_COLOR_WHITE));
+        // Bottom Half Display (Distance value + units + moving time)
+        // Kept at default fontId (0x02)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
