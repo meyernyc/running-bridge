@@ -62,7 +62,7 @@ function updateStatus(msg) {
 }
 
 /**
- * Helper to pause execution (gives ActiveLook hardware time to ready GATT services)
+ * Helper to pause execution
  */
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
@@ -111,39 +111,53 @@ async function initializeBridge() {
 }
 
 /**
- * Helper to connect/reconnect to Engo Glasses
+ * Helper to connect/reconnect to Engo Glasses with retry logic for GATT drops
  */
-async function connectEngo() {
+async function connectEngo(retries = 5) {
     updateStatus("Connecting to ActiveLook engine...");
-    const engoServer = await engoDevice.gatt.connect();
-    
-    // Brief delay to prevent GATT server disconnect on active negotiation
-    await delay(500); 
-
-    const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
-    engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
-    isEngoCanvasCleared = false; 
+    for (let i = 0; i < retries; i++) {
+        try {
+            const engoServer = await engoDevice.gatt.connect();
+            await delay(1000); // Give the OS time to establish the GATT DB
+            const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
+            engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
+            isEngoCanvasCleared = false; 
+            return; // Success
+        } catch (error) {
+             updateStatus(`Engo GATT fetch failed, retrying (${i+1}/${retries})...`);
+             await delay(1500);
+        }
+    }
+    throw new Error("Failed to fetch Engo GATT services after multiple attempts.");
 }
 
 /**
- * Helper to connect/reconnect to Stryd Pod
+ * Helper to connect/reconnect to Stryd Pod with retry logic for GATT drops
  */
-async function connectStryd() {
+async function connectStryd(retries = 5) {
     updateStatus("Connecting to Stryd Footpod...");
-    const strydServer = await strydDevice.gatt.connect();
-    
-    await delay(300);
-
-    let strydService;
-    try {
-        strydService = await strydServer.getPrimaryService(RSC_SERVICE_UUID);
-    } catch (e) {
-        strydService = await strydServer.getPrimaryService('00001814-0000-1000-8000-00805f9b34fb');
+    for (let i = 0; i < retries; i++) {
+        try {
+            const strydServer = await strydDevice.gatt.connect();
+            await delay(1000);
+            
+            let strydService;
+            try {
+                strydService = await strydServer.getPrimaryService(RSC_SERVICE_UUID);
+            } catch (e) {
+                strydService = await strydServer.getPrimaryService('00001814-0000-1000-8000-00805f9b34fb');
+            }
+            
+            strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
+            await strydServiceChar.startNotifications();
+            strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
+            return; // Success
+        } catch (error) {
+             updateStatus(`Stryd GATT fetch failed, retrying (${i+1}/${retries})...`);
+             await delay(1500);
+        }
     }
-    
-    strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
-    await strydServiceChar.startNotifications();
-    strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
+     throw new Error("Failed to fetch Stryd GATT services after multiple attempts.");
 }
 
 /**
@@ -152,7 +166,7 @@ async function connectStryd() {
 async function onEngoDisconnected() {
     updateStatus("Engo Glasses disconnected. Attempting to reconnect...");
     try {
-        await reconnectWithBackoff(connectEngo);
+        await connectEngo();
         updateStatus("Engo Glasses reconnected successfully.");
     } catch (error) {
         updateStatus("Could not reconnect to Engo Glasses. Please manually restart.");
@@ -165,28 +179,11 @@ async function onEngoDisconnected() {
 async function onStrydDisconnected() {
     updateStatus("Stryd Pod disconnected. Attempting to reconnect...");
     try {
-        await reconnectWithBackoff(connectStryd);
+        await connectStryd();
         updateStatus("Stryd Pod reconnected successfully.");
     } catch (error) {
         updateStatus("Could not reconnect to Stryd Pod. Please manually restart.");
     }
-}
-
-/**
- * Simple Exponential Backoff for Reconnection
- */
-async function reconnectWithBackoff(connectFunction, maxRetries = 5, delayMs = 2000) {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            await connectFunction();
-            return; 
-        } catch (error) {
-            console.warn(`Reconnection failed (attempt ${i + 1}/${maxRetries}). Retrying in ${delayMs}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            delayMs *= 2; 
-        }
-    }
-    throw new Error("Max reconnection attempts reached.");
 }
 
 /**
@@ -272,6 +269,8 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
     try {
         let stringEncoder = new TextEncoder();
         let encodedBytes = stringEncoder.encode(commands);
+        // The RX server allows both Bluetooth WRITE (with response) and WRITE_NO_RESPONSE mode. 
+        // It is highly recommended to use WRITE (with response) mode.
         await engoRxCharacteristic.writeValueWithResponse(encodedBytes);
     } catch (bleWriteError) {
         console.warn("Frame transmission dropped: " + bleWriteError.message);
