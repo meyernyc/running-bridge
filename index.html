@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stryd to Engo HUD Bridge</title>
     <style>
-        /* Changed margin from "0 auto" to "0" to left-align the entire container */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
         .dashboard { display: flex; justify-content: space-between; margin-top: 30px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
-        /* Changed text-align from "center" to "left" */
         .metric { text-align: left; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
@@ -21,7 +19,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v2.3</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.4 (API Validated)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -44,73 +42,75 @@
     </div>
 
 <script>
-// Global tracking variables for the device connection layer
+// Global tracking variables for device connection layer
 let engoDevice = null;
 let strydDevice = null;
 let engoRxCharacteristic = null;
 let strydServiceChar = null;
 let isEngoCanvasCleared = false; 
 
-// Core Service and Data Channel Blueprint Constants
+// Core Service & Characteristic Blueprint Constants
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
 const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; 
 const RSC_CHAR_UUID     = 'rsc_measurement';
 
-// Pre-compiled Binary Clear Screen Command for ActiveLook API
-const CMD_CLEAR = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
+// API Commands
+const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
+const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); // Hold graphics engine
+const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); // Flush graphics engine
 
 /**
- * Helper to create an ActiveLook binary text command.
- * Frame structure: [Start, CmdID, Format, Length, X(2), Y(2), Rot, Font, Color, ...Text, Null, Footer]
+ * Validated ActiveLook® Binary Text Command Encoder (txtColor ID: 0x3E / txt ID: 0x37)
+ * Layout: [0xFF, CmdID, Format(0x00), Length, X(2B), Y(2B), Rot(1B), Font(1B), Color(1B), StringBytes..., Null(0x00), 0xAA]
  */
-function createActiveLookTextCmd(x, y, text) {
+function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F) {
     let textBytes = new TextEncoder().encode(text);
-    let totalLen = 12 + textBytes.length;
+    // Header (4B) + Parameters (7B) + TextPayload + Null (1B) + Footer (1B)
+    let totalLen = 13 + textBytes.length; 
     let cmd = new Uint8Array(totalLen);
     
-    cmd[0] = 0xFF;             // Start byte
-    cmd[1] = 0x37;             // Command ID (Text)
-    cmd[2] = 0x00;             // Format (No Query ID)
-    cmd[3] = totalLen;         // Total command length
-    cmd[4] = (x >> 8) & 0xFF;  // X coordinate (MSB)
-    cmd[5] = x & 0xFF;         // X coordinate (LSB)
-    cmd[6] = (y >> 8) & 0xFF;  // Y coordinate (MSB)
-    cmd[7] = y & 0xFF;         // Y coordinate (LSB)
-    cmd[8] = 0x00;             // Rotation (0)
-    cmd[9] = 0x02;             // Font ID (2 = Medium)
-    cmd[10] = 0x0F;            // Color (15 = White)
+    cmd[0] = 0xFF;              // Start Byte
+    cmd[1] = 0x37;              // Command ID (txt - Grayscale / MDP05 & MDP08 Compatible)
+    cmd[2] = 0x00;              // Format (1B Length, 0B Query ID)
+    cmd[3] = totalLen & 0xFF;   // Total Length
     
-    cmd.set(textBytes, 11);    // Insert text string payload
+    // Coordinates (s16 MSB First)
+    cmd[4] = (x >> 8) & 0xFF;   
+    cmd[5] = x & 0xFF;          
+    cmd[6] = (y >> 8) & 0xFF;   
+    cmd[7] = y & 0xFF;          
     
-    cmd[totalLen - 2] = 0x00;  // Null terminator for string
-    cmd[totalLen - 1] = 0xAA;  // Footer byte
+    cmd[8] = 0x00;              // Rotation (0)
+    cmd[9] = fontId & 0xFF;     // Font ID
+    cmd[10] = colorVal & 0xFF;  // Grayscale / Color Value (0x0F = Full Brightness White)
+    
+    // Copy String Payload
+    cmd.set(textBytes, 11);
+    
+    cmd[totalLen - 2] = 0x00;   // String NUL Terminator
+    cmd[totalLen - 1] = 0xAA;   // ActiveLook Footer Byte
     
     return cmd;
 }
 
 /**
- * Visual feedback logger
+ * Logger UI feedback
  */
 function updateStatus(msg) {
     const statusElement = document.getElementById('status');
-    if (statusElement) {
-        statusElement.innerText = msg;
-    }
+    if (statusElement) statusElement.innerText = msg;
     console.log("[Bridge Log]: " + msg);
 }
 
-/**
- * Helper to pause execution
- */
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 /**
- * Step 1: Connect to Engo Glasses
+ * Step 1: Connect ActiveLook Glasses
  */
 async function connectEngoGlasses() {
     try {
-        updateStatus("Scanning for Engo 3 Glasses...");
+        updateStatus("Scanning for Engo Glasses...");
         engoDevice = await navigator.bluetooth.requestDevice({
             filters: [
                 { namePrefix: 'ENGO' },
@@ -123,24 +123,21 @@ async function connectEngoGlasses() {
         engoDevice.addEventListener('gattserverdisconnected', onEngoDisconnected);
         await connectEngo();
         
-        updateStatus("Glasses connected! Now click 'Connect Stryd'.");
-        
-        // Enable the second button now that the first is connected
+        updateStatus("Glasses connected! Click 'Connect Stryd'.");
         const strydBtn = document.getElementById('btn-stryd');
         strydBtn.disabled = false;
         strydBtn.style.backgroundColor = '#2196F3'; 
-        
     } catch (error) {
         updateStatus("Engo Connection Failure: " + error.message);
     }
 }
 
 /**
- * Step 2: Connect to Stryd Footpod
+ * Step 2: Connect Stryd Footpod
  */
 async function connectStrydPod() {
     try {
-        updateStatus("Scanning for Stryd Footpod (Shake pod to wake)...");
+        updateStatus("Scanning for Stryd Footpod...");
         strydDevice = await navigator.bluetooth.requestDevice({
             filters: [
                 { namePrefix: 'Stryd' },
@@ -156,26 +153,20 @@ async function connectStrydPod() {
         
         strydDevice.addEventListener('gattserverdisconnected', onStrydDisconnected);
         await connectStryd();
-        
-        updateStatus("Bridge fully active! Ready to run.");
-        
+        updateStatus("Bridge active! Ready to run.");
     } catch (error) {
         updateStatus("Stryd Connection Failure: " + error.message);
     }
 }
 
 /**
- * Wakes up the Engo display and clears the "Searching" screen using Binary Commands
+ * Clear display and set status text
  */
 async function initEngoDisplay() {
     if (!engoRxCharacteristic) return;
-    
     try {
-        // Clear screen
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
-        
-        // Write status text - X set to 0 for flush left alignment
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 30, "LINKED"));
         await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 60, "Waiting for Stryd..."));
@@ -184,9 +175,6 @@ async function initEngoDisplay() {
     }
 }
 
-/**
- * Helper to connect/reconnect to Engo Glasses with retry logic for GATT drops
- */
 async function connectEngo(retries = 5) {
     updateStatus("Connecting to ActiveLook engine...");
     for (let i = 0; i < retries; i++) {
@@ -196,22 +184,16 @@ async function connectEngo(retries = 5) {
             const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
             engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
             isEngoCanvasCleared = false; 
-            
-            // WAKE UP THE SCREEN
             await initEngoDisplay();
-
-            return; // Success
+            return;
         } catch (error) {
-             updateStatus(`Engo GATT fetch failed, retrying (${i+1}/${retries})...`);
+             updateStatus(`Engo GATT fetch retry (${i+1}/${retries})...`);
              await delay(1500);
         }
     }
-    throw new Error("Failed to fetch Engo GATT services after multiple attempts.");
+    throw new Error("Failed to fetch Engo GATT services.");
 }
 
-/**
- * Helper to connect/reconnect to Stryd Pod with retry logic for GATT drops
- */
 async function connectStryd(retries = 5) {
     updateStatus("Connecting to Stryd Footpod...");
     for (let i = 0; i < retries; i++) {
@@ -229,54 +211,35 @@ async function connectStryd(retries = 5) {
             strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
             await strydServiceChar.startNotifications();
             strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
-            return; // Success
+            return;
         } catch (error) {
-             updateStatus(`Stryd GATT fetch failed, retrying (${i+1}/${retries})...`);
+             updateStatus(`Stryd GATT fetch retry (${i+1}/${retries})...`);
              await delay(1500);
         }
     }
-     throw new Error("Failed to fetch Stryd GATT services after multiple attempts.");
+    throw new Error("Failed to fetch Stryd GATT services.");
 }
 
-/**
- * Auto-reconnect handler for Engo Glasses
- */
 async function onEngoDisconnected() {
-    updateStatus("Engo Glasses disconnected. Attempting to reconnect...");
-    try {
-        await connectEngo();
-        updateStatus("Engo Glasses reconnected successfully.");
-    } catch (error) {
-        updateStatus("Could not reconnect to Engo Glasses. Please manually restart.");
-    }
+    updateStatus("Engo Glasses disconnected. Reconnecting...");
+    try { await connectEngo(); } catch (e) { updateStatus("Engo reconnect failed."); }
 }
 
-/**
- * Auto-reconnect handler for Stryd Pod
- */
 async function onStrydDisconnected() {
-    updateStatus("Stryd Pod disconnected. Attempting to reconnect...");
-    try {
-        await connectStryd();
-        updateStatus("Stryd Pod reconnected successfully.");
-    } catch (error) {
-        updateStatus("Could not reconnect to Stryd Pod. Please manually restart.");
-    }
+    updateStatus("Stryd Pod disconnected. Reconnecting...");
+    try { await connectStryd(); } catch (e) { updateStatus("Stryd reconnect failed."); }
 }
 
 /**
- * Handles incoming binary packets coming directly from the Stryd pod hardware layer.
+ * Decodes incoming BLE telemetry from Stryd Footpod
  */
 function processIncomingStrydData(event) {
     let dataView = event.target.value;
-    
     let flags = dataView.getUint8(0);
     let strideLengthPresent = flags & 0x01;
     let totalDistancePresent = flags & 0x02;
     
     let byteOffset = 1;
-    
-    // 1. Calculate Live Running Pace
     let rawSpeed = dataView.getUint16(byteOffset, true);
     byteOffset += 2;
     
@@ -291,15 +254,9 @@ function processIncomingStrydData(event) {
         paceStr = `${paceMin}:${paceSec}`;
     }
     
-    // 2. Shift past basic Cadence tracking metrics
-    byteOffset += 1;
+    byteOffset += 1; // Cadence
+    if (strideLengthPresent) byteOffset += 2;
     
-    // 3. Shift past Stride Length if flag index is checked
-    if (strideLengthPresent) {
-        byteOffset += 2;
-    }
-    
-    // 4. Extract Total Accumulated Run Distance
     let distanceMiles = "0.00";
     if (totalDistancePresent) {
         let totalMeters = dataView.getUint32(byteOffset, true) / 10;
@@ -307,45 +264,46 @@ function processIncomingStrydData(event) {
         byteOffset += 4;
     }
     
-    // 5. Parse Real-Time Running Power
     let powerWatts = 0;
     if (byteOffset < dataView.byteLength) {
         powerWatts = dataView.getUint16(byteOffset, true);
     }
     
-    // 6. Push values directly onto the phone's web dashboard
+    // Update local Web UI
     document.getElementById('view-pwr').innerText = `${powerWatts} W`;
     document.getElementById('view-pce').innerText = paceStr;
     document.getElementById('view-dst').innerText = `${distanceMiles} mi`;
     
-    // 7. Hand parameters down to the ActiveLook glass rendering encoder
+    // Push update to HUD
     pushLayoutToGlasses(powerWatts, paceStr, distanceMiles);
 }
 
 /**
- * Encodes layout strings and pushes binary commands to the ActiveLook Engine
+ * Pushes metrics using hold/flush to eliminate HUD flickering & GATT queue overflow
  */
 async function pushLayoutToGlasses(pwr, pce, dst) {
     if (!engoRxCharacteristic) return;
     
-    let pwrFormatted = `PWR: ${pwr} W`.padEnd(12, ' ');
-    let pceFormatted = `PCE: ${pce}`.padEnd(12, ' ');
-    let dstFormatted = `DST: ${dst} mi`.padEnd(15, ' ');
+    let pwrFormatted = `PWR: ${pwr} W`;
+    let pceFormatted = `PCE: ${pce}`;
+    let dstFormatted = `DST: ${dst} mi`;
 
     try {
+        // Hold frame render queue
+        await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
+
         if (!isEngoCanvasCleared) {
             await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
-            await delay(100);
             isEngoCanvasCleared = true;
         }
 
-        // Send layout frames sequentially with slight delays to prevent GATT overload
-        // X coordinates updated to 0 for flush left alignment
+        // Write frames to memory buffer
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 20, pwrFormatted));
-        await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 50, pceFormatted));
-        await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 80, dstFormatted));
+        
+        // Flush buffer simultaneously onto display
+        await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
         
     } catch (bleWriteError) {
         console.warn("Frame transmission dropped: " + bleWriteError.message);
