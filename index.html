@@ -104,8 +104,8 @@ const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]);
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
 const COLOR_DEFAULT_WHITE = 15;
-const COLOR_BRIGHT_RED = 0x3C;
-const COLOR_GREEN = 0xFF;
+const COLOR_BRIGHT_RED = 0x04;
+const COLOR_GREEN = 0x01;
 
 const CONTROL_ERROR_MESSAGES = {
     0x01: "Flow: client can send data",
@@ -471,13 +471,13 @@ async function updateUI() {
         
         // Power range text displayed underneath the power number
         const rangeTextLen = rangeText.length;
-        const payloadRange = createActiveLookColorTextCmd(152, 246, rangeText, rangeTextLen, 0x01, COLOR_DEFAULT_WHITE);
+        const payloadRange = createActiveLookColorTextCmd(152, 176, rangeText, rangeTextLen, 0x01, 0x3C);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadRange);
         
         // Distance & Time secondary line
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
         const secTextLen = secText.length;
-        const payloadSec = createActiveLookColorTextCmd(170, 136, secText, secTextLen, 0x01, 0xFF);
+        const payloadSec = createActiveLookColorTextCmd(170, 136, secText, secTextLen, 0x01, 0x7D);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadSec);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
