@@ -22,12 +22,12 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.18 (RG Palette Spectrum)</span></h2>
+    <h2>Engo 3 Setup <span class="version">v2.19 (Custom Power Color Gradient)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
-    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Full RG Color Palette</button>
+    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Custom Color Gradient</button>
     
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -78,18 +78,9 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-// Complete 8-bit RG Color Chart Array ordered progressively from Red/Dark to Green/Yellow-Green
-const RG_PALETTE = [
-    0x00, 0x04, 0x20, 0x14, 0x18, 0x28, 0x1C, 0x38, 0x3C, // Deep Reds / Darks
-    0x01, 0x05, 0x21, 0x15, 0x19, 0x29, 0x1D, 0x39, 0x3D, // Red-Orange transition
-    0x02, 0x06, 0x22, 0x16, 0x1A, 0x2A, 0x1E, 0x3A, 0x3E, // Orange
-    0x41, 0x45, 0x61, 0x55, 0x59, 0x69, 0x5D, 0x79, 0x7D, // Orange-Yellow
-    0x81, 0x85, 0xA1, 0x95, 0x99, 0xA9, 0x9D, 0xB9, 0xBD, // Yellow
-    0x82, 0x86, 0xA2, 0x96, 0x9A, 0xAA, 0x9E, 0xBA, 0xBE, // Yellow-Green lighter
-    0x43, 0x47, 0x63, 0x57, 0x5B, 0x6B, 0x5F, 0x7B, 0x7F, // Bright Yellow-Green spectrum
-    0x83, 0x87, 0xA3, 0x97, 0x9B, 0xAB, 0x9F, 0xBB, 0xBF, // Rich Greens
-    0xC3, 0xC7, 0xE3, 0xD7, 0xDB, 0xEB, 0xDF, 0xFB, 0xFF  // Max Greens / Highlights
-];
+// Pure Red column and Green column extracts from the chart palette for gradient mapping
+const RED_COLUMN = [0x00, 0x04, 0x20, 0x14, 0x18, 0x28, 0x1C, 0x38, 0x3C];
+const GREEN_COLUMN = [0x03, 0x47, 0x63, 0x57, 0x5B, 0x6B, 0x5F, 0x7B, 0x7F, 0x83, 0x87, 0xA3, 0x97, 0x9B, 0xAB, 0x9F, 0xBB, 0xBF, 0xC3, 0xC7, 0xE3, 0xD7, 0xDB, 0xEB, 0xDF, 0xFB, 0xFF];
 
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
@@ -183,41 +174,58 @@ async function connectEngoGlasses() {
     }
 }
 
-// Sweeps sequentially through the entire mapped RG Palette chart array
+// Custom power color mapping based on your specified power brackets and gradient directions
+function getPowerColor(power) {
+    if (power <= 0) return 0x00; // Off/Black when stopped
+
+    if (power >= 1 && power <= 49) {
+        // Power 1 to 49: Darkest red to lightest red (forward slice of RED_COLUMN)
+        let progress = (power - 1) / (49 - 1);
+        let index = Math.floor(progress * (RED_COLUMN.length - 1));
+        return RED_COLUMN[index];
+    } 
+    else if (power >= 50 && power <= 75) {
+        // Power 50 to 75: Darkest green (using start of GREEN_COLUMN)
+        return GREEN_COLUMN[0];
+    } 
+    else if (power >= 76 && power <= 400) {
+        // Power 76 to 400: Lightest red down to darkest red (reversed slice of RED_COLUMN)
+        let progress = (power - 76) / (400 - 76);
+        let index = Math.floor((1.0 - progress) * (RED_COLUMN.length - 1));
+        return RED_COLUMN[index];
+    } 
+    else {
+        // Above 400W: Cap at darkest red end point
+        return RED_COLUMN[RED_COLUMN.length - 1];
+    }
+}
+
 async function testColors() {
     if (!engoRxCharacteristic) return;
-    updateStatus("Running Full RG Palette Spectrum Test...");
+    updateStatus("Testing Custom Power Gradient Ranges...");
+    
+    // Test key milestone power values across your defined ranges
+    const testPowers = [0, 1, 25, 49, 50, 65, 75, 76, 200, 400];
     
     try {
-        for (let colorId of RG_PALETTE) {
+        for (let pwr of testPowers) {
+            let colorVal = getPowerColor(pwr);
             await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
             await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
             
             await engoRxCharacteristic.writeValueWithResponse(
-                createActiveLookColorTextCmd(152, 226, `HEX: 0x${colorId.toString(16).toUpperCase().padStart(2, '0')}`, 0x02, colorId)
+                createActiveLookColorTextCmd(152, 226, `Test PWR: ${pwr}W`, 0x02, colorVal)
             );
             
             await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
-            debugLog(`Displaying Palette Hex: 0x${colorId.toString(16).toUpperCase().padStart(2, '0')}`);
-            await delay(400); 
+            debugLog(`Power: ${pwr}W mapped to Color Hex: 0x${colorVal.toString(16).toUpperCase().padStart(2, '0')}`);
+            await delay(1500); 
         }
-        updateStatus("Palette color test complete.");
+        updateStatus("Custom gradient test complete.");
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
     } catch (e) {
         debugLog("Test error: " + e.message);
     }
-}
-
-// Maps power ranges dynamically across the RG spectrum array index smoothly
-function getPowerColor(power) {
-    if (power === 0) return 0x00; // Off / Black when stopped
-    
-    // Map power output linearly from 0W to 400W across the full 81-color RG palette array index
-    let maxPowerRange = 400;
-    let clampedPower = Math.min(Math.max(power, 0), maxPowerRange);
-    let index = Math.floor((clampedPower / maxPowerRange) * (RG_PALETTE.length - 1));
-    
-    return RG_PALETTE[index];
 }
 
 async function connectStrydPod() {
@@ -333,15 +341,15 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // Dynamically compute exact palette color based on current running power
+        // Get custom gradient color based on exact power criteria rules
         let powerColor = getPowerColor(currentPower);
 
-        // Top Half (Power with smooth spectrum color transition)
+        // Top Half (Power with custom gradient transition color)
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookColorTextCmd(152, 226, `${currentPower} W`, 0x04, powerColor)
         );
         
-        // Bottom Half (Distance & Time in bright highlight green/yellow)
+        // Bottom Half (Distance & Time in bright highlight green)
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0xFF)
         );
