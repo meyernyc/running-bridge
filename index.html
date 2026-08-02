@@ -28,29 +28,21 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.20 (Dynamic Power Zone Config)</span></h2>
+    <h2>Engo 3 Setup <span class="version">v2.21 (Single Range Red/Green Config)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
     
     <div class="config-panel">
-        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Power Zone Configuration</h3>
+        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Power Range Configuration</h3>
         <div class="config-row">
-            <label>Zone 1 (Dark to Light Red) Max Power:</label>
-            <input type="number" id="z1-max" value="49">
-        </div>
-        <div class="config-row">
-            <label>Zone 2 (Dark Green) Range:</label>
-            <input type="number" id="z2-min" value="50"> to <input type="number" id="z2-max" value="75">
-        </div>
-        <div class="config-row">
-            <label>Zone 3 (Light to Dark Red) Max Power:</label>
-            <input type="number" id="z3-max" value="400">
+            <label>Target Power Range (Green inside, Bright Red outside):</label>
+            <input type="number" id="pwr-min" value="200"> to <input type="number" id="pwr-max" value="250">
         </div>
     </div>
 
-    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Dynamic Gradient Ranges</button>
+    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Range Color Transition</button>
     
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -101,8 +93,9 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-const RED_COLUMN = [0x00, 0x04, 0x20, 0x14, 0x18, 0x28, 0x1C, 0x38, 0x3C];
-const GREEN_COLUMN = [0x03, 0x47, 0x63, 0x57, 0x5B, 0x6B, 0x5F, 0x7B, 0x7F, 0x83, 0x87, 0xA3, 0x97, 0x9B, 0xAB, 0x9F, 0xBB, 0xBF, 0xC3, 0xC7, 0xE3, 0xD7, 0xDB, 0xEB, 0xDF, 0xFB, 0xFF];
+// Brightest red from the palette column (0x3C) and primary green (0xFF)
+const COLOR_BRIGHT_RED = 0x3C;
+const COLOR_GREEN = 0xFF;
 
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
@@ -196,44 +189,28 @@ async function connectEngoGlasses() {
     }
 }
 
-// Dynamic configuration-driven power color gradient calculation
+// Single configurable power range logic: Green inside range, Bright Red outside range
 function getPowerColor(power) {
     if (power <= 0) return 0x00; // Off/Black when stopped
 
-    let z1Max = parseInt(document.getElementById('z1-max').value) || 49;
-    let z2Min = parseInt(document.getElementById('z2-min').value) || 50;
-    let z2Max = parseInt(document.getElementById('z2-max').value) || 75;
-    let z3Max = parseInt(document.getElementById('z3-max').value) || 400;
+    let pwrMin = parseInt(document.getElementById('pwr-min').value) || 200;
+    let pwrMax = parseInt(document.getElementById('pwr-max').value) || 250;
 
-    if (power >= 1 && power <= z1Max) {
-        let progress = (power - 1) / (z1Max - 1 || 1);
-        let index = Math.floor(progress * (RED_COLUMN.length - 1));
-        return RED_COLUMN[index];
-    } 
-    else if (power >= z2Min && power <= z2Max) {
-        return GREEN_COLUMN[0];
-    } 
-    else if (power > z2Max && power <= z3Max) {
-        let progress = (power - (z2Max + 1)) / (z3Max - (z2Max + 1) || 1);
-        let index = Math.floor((1.0 - progress) * (RED_COLUMN.length - 1));
-        return RED_COLUMN[index];
-    } 
-    else if (power > z3Max) {
-        return RED_COLUMN[RED_COLUMN.length - 1];
+    if (power >= pwrMin && power <= pwrMax) {
+        return COLOR_GREEN;       // Inside target range
+    } else {
+        return COLOR_BRIGHT_RED;  // Outside target range (brightest red)
     }
-    return RED_COLUMN[0];
 }
 
 async function testColors() {
     if (!engoRxCharacteristic) return;
-    updateStatus("Testing Dynamic Range Configuration...");
+    updateStatus("Testing Single Range Configuration...");
     
-    let z1Max = parseInt(document.getElementById('z1-max').value) || 49;
-    let z2Min = parseInt(document.getElementById('z2-min').value) || 50;
-    let z2Max = parseInt(document.getElementById('z2-max').value) || 75;
-    let z3Max = parseInt(document.getElementById('z3-max').value) || 400;
+    let pwrMin = parseInt(document.getElementById('pwr-min').value) || 200;
+    let pwrMax = parseInt(document.getElementById('pwr-max').value) || 250;
     
-    const testPowers = [1, Math.floor(z1Max / 2), z1Max, z2Min, Math.floor((z2Min + z2Max) / 2), z2Max, z2Max + 1, Math.floor((z2Max + 1 + z3Max) / 2), z3Max];
+    const testPowers = [0, pwrMin - 10, pwrMin, Math.floor((pwrMin + pwrMax) / 2), pwrMax, pwrMax + 10];
     
     try {
         for (let pwr of testPowers) {
@@ -249,7 +226,7 @@ async function testColors() {
             debugLog(`Power: ${pwr}W mapped to Color Hex: 0x${colorVal.toString(16).toUpperCase().padStart(2, '0')}`);
             await delay(1500); 
         }
-        updateStatus("Dynamic range test complete.");
+        updateStatus("Range test complete.");
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
     } catch (e) {
         debugLog("Test error: " + e.message);
@@ -361,7 +338,7 @@ async function updateUI() {
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
-    document.ей = document.getElementById('view-tim').innerText = currentMovingTimeStr;
+    document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
