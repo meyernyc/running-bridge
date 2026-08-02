@@ -103,6 +103,7 @@ let cfgVersion = 1;
 const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
+const CMD_SET_GAUGE_COLOR = new Uint8Array([0xFF, 0x3D, 0x00, 0x05, 0x01, 0xAA]); // Sets global shape color to 0x01
 
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x04;
@@ -200,10 +201,10 @@ function createGaugeSaveCmd() {
     
     cmd[4] = 0x01; 
     
-    cmd[5] = 0x00; cmd[6] = 0x97;
-    cmd[7] = 0x00; cmd[8] = 0x7F;
-    cmd[9] = 0x00; cmd[10] = 0x6E;
-    cmd[11] = 0x00; cmd[12] = 0x4B;
+    cmd[5] = 0x00; cmd[6] = 0x97; // x = 151
+    cmd[7] = 0x00; cmd[8] = 0x7F; // y = 127
+    cmd[9] = 0x00; cmd[10] = 0x6E; // rExt = 110
+    cmd[11] = 0x00; cmd[12] = 0x5D; // rIn = 93 (Reduced width by 50%)
     
     cmd[13] = 0x03; 
     cmd[14] = 0x0E; 
@@ -459,6 +460,8 @@ async function updateUI() {
             let remainingMilli = Math.max(0, targetMilli - movingTimeMilli);
             let percent = targetMilli > 0 ? (remainingMilli / targetMilli) * 100 : 0;
             
+            // Set the drawing color to 0x01 BEFORE drawing the gauge
+            await engoRxCharacteristic.writeValueWithoutResponse(CMD_SET_GAUGE_COLOR);
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
