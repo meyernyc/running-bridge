@@ -19,10 +19,10 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v3.0 (Engo 3 Color + Gauge)</span></h2>
+    <h2>Run HUD Setup 🏃‍♂️ <span class="version">v3.1 (Engo 3 Color + Gauge Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo 3</button>
-        <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
+        <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo 3 🕶️</button>
+        <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd 👟</button>
     </div>
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -77,7 +77,7 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-// ActiveLook 3.0 Palette Definitions
+// ActiveLook 3.0 Palette Definitions 🎨
 const COLOR_OFF    = 0x00;
 const COLOR_WHITE  = 0x01;
 const COLOR_GREEN  = 0x02;
@@ -123,15 +123,15 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = COLOR_GRE
     return cmd;
 }
 
-// ActiveLook 3.0 Gauge Commands
+// ActiveLook 3.0 Gauge Commands (Updated to 16-bit 0x71 spec)
 function saveActiveLookGaugeCmd(gaugeId, x, y, rOut, rIn, startAngle, endAngle, orientation = 0x00) {
     return new Uint8Array([
-        0xFF, 0x68, 0x00, 0x0D,
+        0xFF, 0x71, 0x00, 0x11,
         gaugeId & 0xFF,
-        (x >> 8) & 0xFF, x & 0xFF,
-        (y >> 8) & 0xFF, y & 0xFF,
-        rOut & 0xFF,
-        rIn & 0xFF,
+        (x >> 8) & 0xFF, x & 0xFF,       // Center X (2 bytes)
+        (y >> 8) & 0xFF, y & 0xFF,       // Center Y (2 bytes)
+        (rOut >> 8) & 0xFF, rOut & 0xFF, // Outer Radius (2 bytes)
+        (rIn >> 8) & 0xFF, rIn & 0xFF,   // Inner Radius (2 bytes)
         startAngle & 0xFF,
         endAngle & 0xFF,
         orientation & 0xFF,
@@ -184,7 +184,7 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Define Gauge #1 centered on screen (x: 152, y: 150, outer radius: 40, inner radius: 30)
+        // Save Gauge #1 (Centered at X:152, Y:150, Radii: 40px outer / 30px inner)
         await engoRxCharacteristic.writeValueWithResponse(saveActiveLookGaugeCmd(1, 152, 150, 40, 30, 0, 180));
         await delay(50);
 
@@ -321,17 +321,17 @@ async function updateUI() {
         
         const startX = 152;
         
-        // Dynamically shift HUD colors based on power zones
+        // Dynamic Power Zones Mapping 🎯
         let targetColor = COLOR_WHITE;
         if (currentPower > 0 && currentPower <= 250) {
-            targetColor = COLOR_GREEN;  // Target Zone: Green
+            targetColor = COLOR_GREEN;  // Target Effort: Green
         } else if (currentPower > 250 && currentPower <= 320) {
-            targetColor = COLOR_YELLOW; // Warning Zone: Yellow
+            targetColor = COLOR_YELLOW; // Warning Threshold: Yellow
         } else if (currentPower > 320) {
-            targetColor = COLOR_RED;    // High Effort: Red
+            targetColor = COLOR_RED;    // High Effort / Max: Red
         }
 
-        // Render Power metric in dynamic color
+        // Render Power metric in target color
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04, targetColor)
         );
