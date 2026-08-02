@@ -22,12 +22,12 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.21 (Hex Palette Fix)</span></h2>
+    <h2>Engo 3 Setup <span class="version">v2.23 (Forced Color Redraw Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
-    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Grid Colors</button>
+    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Palette Gradient</button>
     
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -66,6 +66,7 @@ let isUpdatingHUD = false;
 let movingTimeMilli = 0;
 let lastRscTime = 0;
 let currentMovingTimeStr = "0:00";
+let lastSentColor = -1; // Track last color to force writes
 
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
@@ -78,10 +79,28 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-// EXACT HEX CODES FROM THE API DOCUMENTATION IMAGE
-const COLOR_GREEN  = 0xC3; 
-const COLOR_RED    = 0x3C; 
-const COLOR_YELLOW = 0xFF; 
+const RED_RAMP = [0x04, 0x20, 0x14, 0x18, 0x28, 0x1C, 0x38, 0x3C];
+const YELLOW_RAMP = [0x3D, 0x3E, 0x7D, 0xBD, 0xBE, 0x7F, 0xBF, 0xFF];
+const GREEN_RAMP = [0x01, 0x02, 0x41, 0x81, 0x82, 0x43, 0x83, 0xC3];
+
+function getPaletteColorForPower(power) {
+    if (power === 0) return 0xFF; 
+    if (power < 200) {
+        let index = Math.floor((power / 200) * RED_RAMP.length);
+        if (index >= RED_RAMP.length) index = RED_RAMP.length - 1;
+        return RED_RAMP[index];
+    } else if (power >= 200 && power <= 250) {
+        let progress = (power - 200) / 50;
+        let index = Math.floor(progress * YELLOW_RAMP.length);
+        if (index >= YELLOW_RAMP.length) index = YELLOW_RAMP.length - 1;
+        return YELLOW_RAMP[index];
+    } else {
+        let excess = Math.min(power - 250, 100); 
+        let index = Math.floor((excess / 100) * GREEN_RAMP.length);
+        if (index >= GREEN_RAMP.length) index = GREEN_RAMP.length - 1;
+        return GREEN_RAMP[index];
+    }
+}
 
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
@@ -94,7 +113,6 @@ function formatTime(ms) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// 0x3E txtColor using specific Hex 
 function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 0xFF, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 13 + textBytes.length; 
@@ -158,12 +176,11 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Connect text in Yellow (0xFF)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, "LINKED", 0x02, COLOR_YELLOW));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, "LINKED", 0x02, 0xFF));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, "Waiting for Stryd...", 0x02, COLOR_YELLOW));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, "Waiting for Stryd...", 0x02, 0xFF));
         
-        updateStatus("Glasses connected! Click 'Connect Stryd' or test grid colors.");
+        updateStatus("Glasses connected! Click 'Connect Stryd'.");
         
         const strydBtn = document.getElementById('btn-stryd');
         strydBtn.disabled = false;
@@ -179,31 +196,23 @@ async function connectEngoGlasses() {
 
 async function testColors() {
     if (!engoRxCharacteristic) return;
-    updateStatus("Running Hex Grid Display Test...");
-    
-    // Testing the extreme corners of the provided API image grid
-    const testPalette = [
-        { id: 0x01, name: "Dark Green (0x01)" },
-        { id: 0xC3, name: "Bright Green (0xC3)" },
-        { id: 0x04, name: "Dark Red (0x04)" },
-        { id: 0x3C, name: "Bright Red (0x3C)" },
-        { id: 0xFF, name: "Bright Yellow (0xFF)" }
-    ]; 
+    updateStatus("Running Full Palette Transition Test...");
+    const fullTransition = [...RED_RAMP, ...YELLOW_RAMP, ...GREEN_RAMP];
     
     try {
-        for (let color of testPalette) {
+        for (let hexCode of fullTransition) {
             await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
             await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
             
             await engoRxCharacteristic.writeValueWithResponse(
-                createActiveLookColorTextCmd(152, 226, color.name, 0x02, color.id)
+                createActiveLookColorTextCmd(152, 226, `Hex: 0x${hexCode.toString(16).toUpperCase()}`, 0x02, hexCode)
             );
             
             await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
-            debugLog(`Displaying Hex: 0x${color.id.toString(16).toUpperCase()} - ${color.name}`);
-            await delay(2500); 
+            debugLog(`Test Color Sent - Hex: 0x${hexCode.toString(16).toUpperCase()}`);
+            await delay(600); 
         }
-        updateStatus("Grid test complete.");
+        updateStatus("Gradient test complete.");
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
     } catch (e) {
         debugLog("Test error: " + e.message);
@@ -239,7 +248,7 @@ async function connectStrydPod() {
             strydPowerChar.addEventListener('characteristicvaluechanged', processIncomingCP);
             debugLog("Cycling Power Service Bound.");
         } catch (cpError) {
-            debugLog("Warning: Cycling Power binding failed. Relying on RSC appended power.");
+            debugLog("Warning: Cycling Power binding failed.");
         }
         
         updateStatus("Bridge active! Dual GATT streams linked.");
@@ -278,7 +287,6 @@ function processIncomingRSC(event) {
     }
     
     currentMovingTimeStr = formatTime(movingTimeMilli);
-    
     byteOffset += 1;
     if (strideLengthPresent) byteOffset += 2;
     
@@ -319,37 +327,34 @@ async function updateUI() {
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    let hudColorHex;
-    let webColorCode;
-
-    if (currentPower === 0) {
-        hudColorHex = COLOR_YELLOW; 
-        webColorCode = "#ffeb3b";
-    } else if (currentPower >= 200 && currentPower <= 250) {
-        hudColorHex = COLOR_GREEN; 
-        webColorCode = "#4caf50";
-    } else {
-        hudColorHex = COLOR_RED; 
-        webColorCode = "#f44336";
-    }
-
-    // Update web dashboard color
+    let hudColorHex = getPaletteColorForPower(currentPower);
+    
+    let webColorCode = "#ffffff";
+    if (currentPower > 0 && currentPower < 200) webColorCode = "#f44336";
+    else if (currentPower >= 200 && currentPower <= 250) webColorCode = "#ffeb3b";
+    else if (currentPower > 250) webColorCode = "#4caf50";
+    
     pwrEl.style.color = webColorCode;
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
-        await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // Top Half (Power Zone)
+        // FIX: Force clear screen buffer on color change to prevent firmware render caching
+        if (hudColorHex !== lastSentColor) {
+            await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
+            lastSentColor = hudColorHex;
+        }
+        
+        // Top Half (Power Zone with active color hex)
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookColorTextCmd(152, 226, `${currentPower} W`, 0x04, hudColorHex)
         );
         
-        // Bottom Half (Distance & Time in Yellow)
+        // Bottom Half (Distance & Time in Yellow 0xFF)
         await engoRxCharacteristic.writeValueWithResponse(
-            createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, COLOR_YELLOW)
+            createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0xFF)
         );
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
