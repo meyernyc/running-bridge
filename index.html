@@ -14,11 +14,12 @@
         button:active { background-color: #1976D2; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
+        .version { font-size: 14px; color: #888; font-weight: normal; margin-left: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>Run HUD Setup</h2>
+    <h2>Run HUD Setup <span class="version">v1.1</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
