@@ -77,7 +77,7 @@ function createActiveLookTextCmd(x, y, text) {
     cmd[5] = x & 0xFF;         // X coordinate (LSB)
     cmd[6] = (y >> 8) & 0xFF;  // Y coordinate (MSB)
     cmd[7] = y & 0xFF;         // Y coordinate (LSB)
-    cmd[8] = 0x01;             // Rotation (0)
+    cmd[8] = 0x00;             // Rotation (0)
     cmd[9] = 0x02;             // Font ID (2 = Medium)
     cmd[10] = 0x0F;            // Color (15 = White)
     
