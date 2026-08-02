@@ -130,6 +130,24 @@ async function connectStrydPod() {
 }
 
 /**
+ * Wakes up the Engo display and clears the "Searching" screen
+ */
+async function initEngoDisplay() {
+    if (!engoRxCharacteristic) return;
+    
+    // Commands: clear screen, turn display on, and write a waiting message
+    let commands = "clear\ndisp on\ntext 10 30 \"ENG0 LINKED\"\ntext 10 60 \"Waiting for Stryd...\"\n";
+    
+    try {
+        let stringEncoder = new TextEncoder();
+        let encodedBytes = stringEncoder.encode(commands);
+        await engoRxCharacteristic.writeValueWithResponse(encodedBytes);
+    } catch (error) {
+        console.warn("Failed to wake up Engo display: " + error.message);
+    }
+}
+
+/**
  * Helper to connect/reconnect to Engo Glasses with retry logic for GATT drops
  */
 async function connectEngo(retries = 5) {
@@ -141,6 +159,10 @@ async function connectEngo(retries = 5) {
             const engoService = await engoServer.getPrimaryService(ENGO_SERVICE_UUID);
             engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
             isEngoCanvasCleared = false; 
+            
+            // WAKE UP THE SCREEN HERE
+            await initEngoDisplay();
+
             return; // Success
         } catch (error) {
              updateStatus(`Engo GATT fetch failed, retrying (${i+1}/${retries})...`);
@@ -276,7 +298,7 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
     let commands = "";
 
     if (!isEngoCanvasCleared) {
-        commands += "clear\n";
+        commands += "clear\ndisp on\n";
         isEngoCanvasCleared = true;
     }
 
