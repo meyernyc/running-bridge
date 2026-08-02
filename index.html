@@ -19,7 +19,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v1.4</span></h2>
+    <h2>Run HUD Setup <span class="version">v1.5</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -43,11 +43,11 @@
 
 <script>
 // --- DISPLAY CONFIGURATION ---
-const TEXT_ROTATION = 0x02; // 0x02 = 180-degree flip. (Change to 0x00 if it's ever upside down again)
-const X_LEFT = 10;          // How far from the left edge the text starts
+const DISPLAY_WIDTH = 304;   // Engo 3 native width
+const DISPLAY_HEIGHT = 256;  // Engo 3 native height
 
-// Since the screen is flipped, Y grows from bottom to top. 
-// Higher numbers = higher up in your vision.
+// Logical Layout: We map coordinates logically based on your vision.
+const X_LEFT = 10;
 const Y_TOP = 80;  
 const Y_MID = 50;  
 const Y_BOT = 20;  
@@ -72,6 +72,12 @@ const CMD_CLEAR = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
  * Helper to create an ActiveLook binary text command.
  */
 function createActiveLookTextCmd(x, y, text) {
+    // Because the optics are mounted upside down natively, we MUST rotate 180 degrees (0x02).
+    // But rotating 180 means it draws backwards, so we have to flip the X/Y origin 
+    // to the opposite side of the display buffer to keep the text visible on screen!
+    let physX = DISPLAY_WIDTH - x;
+    let physY = DISPLAY_HEIGHT - y;
+
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 12 + textBytes.length;
     let cmd = new Uint8Array(totalLen);
@@ -80,11 +86,11 @@ function createActiveLookTextCmd(x, y, text) {
     cmd[1] = 0x37;             // Command ID (Text)
     cmd[2] = 0x00;             // Format (No Query ID)
     cmd[3] = totalLen;         // Total command length
-    cmd[4] = (x >> 8) & 0xFF;  // X coordinate (MSB)
-    cmd[5] = x & 0xFF;         // X coordinate (LSB)
-    cmd[6] = (y >> 8) & 0xFF;  // Y coordinate (MSB)
-    cmd[7] = y & 0xFF;         // Y coordinate (LSB)
-    cmd[8] = TEXT_ROTATION;    // Text Rotation (0x02 for flipped)
+    cmd[4] = (physX >> 8) & 0xFF;  
+    cmd[5] = physX & 0xFF;         
+    cmd[6] = (physY >> 8) & 0xFF;  
+    cmd[7] = physY & 0xFF;         
+    cmd[8] = 0x02;             // 180-degree rotation
     cmd[9] = 0x02;             // Font ID (2 = Medium)
     cmd[10] = 0x0F;            // Color (15 = White)
     
@@ -346,7 +352,7 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
             isEngoCanvasCleared = true;
         }
 
-        // Send layout frames sequentially using the top-down Y variables
+        // Send layout frames sequentially using the mapped top-down logic
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_TOP, pwrFormatted));
         await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_MID, pceFormatted));
