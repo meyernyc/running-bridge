@@ -21,7 +21,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v1.2</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.1</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -175,10 +175,10 @@ async function initEngoDisplay() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Write status text
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(10, 30, "LINKED"));
+        // Write status text - X set to 0 for flush left alignment
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 30, "LINKED"));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(10, 60, "Waiting for Stryd..."));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 60, "Waiting for Stryd..."));
     } catch (error) {
         console.warn("Failed to wake up Engo display: " + error.message);
     }
@@ -340,11 +340,12 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
         }
 
         // Send layout frames sequentially with slight delays to prevent GATT overload
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(10, 20, pwrFormatted));
+        // X coordinates updated to 0 for flush left alignment
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 20, pwrFormatted));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(10, 50, pceFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 50, pceFormatted));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(10, 80, dstFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(0, 80, dstFormatted));
         
     } catch (bleWriteError) {
         console.warn("Frame transmission dropped: " + bleWriteError.message);
