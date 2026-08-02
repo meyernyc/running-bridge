@@ -10,7 +10,7 @@
         .metric { text-align: left; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
-        button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: width: 100%; font-weight: bold; }
+        button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:active { background-color: #1976D2; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #4caf50; background: #2a2a2a; font-family: monospace; font-size: 14px; }
@@ -22,13 +22,13 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.11 (Engo 3 Color)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.12 (Corrected 0x3D Color Command)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
     <div id="status">Waiting to start...</div>
-    <div class="note"><strong>Hardware Note:</strong> Configured for ENGO 3 full-color display. Power metric and gauge will render in Green, Distance in White.</div>
+    <div class="note"><strong>Hardware Note:</strong> Configured for ENGO 3 full-color display. Power metric and gauge will render using the 0x3D color command.</div>
     <div class="dashboard">
         <div class="metric">
             <div id="view-pwr" class="metric-value">-- W</div>
@@ -97,9 +97,9 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot
     return cmd;
 }
 
-// Global Color Command (Command ID 0x24) - sets paint color for primitives like rectangles
+// Global Color Command (Command ID 0x3D) - sets paint color for primitives like rectangles
 function createActiveLookColorCmd(colorVal) {
-    return new Uint8Array([0xFF, 0x24, 0x00, 0x06, colorVal & 0xFF, 0xAA]);
+    return new Uint8Array([0xFF, 0x3D, 0x00, 0x06, colorVal & 0xFF, 0xAA]);
 }
 
 // Generates the filled rectangle payload (Command ID 0x35)
@@ -280,7 +280,7 @@ async function updateUI() {
         const startX = 152; // Centered X coordinate
         
         // --- POWER GAUGE (Top of screen) ---
-        // Sets drawing color to Green (0x02) for the gauge primitive
+        // Sets drawing color to Green (0x02) for the gauge primitive using the correct 0x3D command!
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorCmd(0x02)); 
         
         // Assuming 500W is the max for the gauge. Adjust if your max power is higher/lower.
