@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.07 (Centered Display)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.08 (Large Power Font)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -130,10 +130,10 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Display connection status directly in the center
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(152, 226, "LINKED"));
+        // Initial messages restored to x=294 (original offset position, not centered)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(152, 181, "Waiting for Stryd..."));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd..."));
         
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
         const strydBtn = document.getElementById('btn-stryd');
@@ -251,8 +251,11 @@ async function updateUI() {
         const startX = 152;
         
         // Top Half Display (Power value + units)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`));
+        // Using fontId 0x04 (Font 4 - 75px spacing) to increase the size!
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
+        
         // Bottom Half Display (Distance value + units)
+        // Kept at default fontId (0x02)
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi`));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
