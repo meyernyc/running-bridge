@@ -19,7 +19,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v1.6</span></h2>
+    <h2>Run HUD Setup <span class="version">v1.7</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -46,11 +46,15 @@
 const DISPLAY_WIDTH = 304;   // Engo 3 native width
 const DISPLAY_HEIGHT = 256;  // Engo 3 native height
 
-// Logical Layout: Smaller Y is higher in your vision, smaller X is further left.
-const X_LEFT = 20; 
-const Y_TOP = 20;  
-const Y_MID = 50;  
-const Y_BOT = 80;  
+// Because the display is rotated 90 degrees, your visual width is the panel's physical height (256)
+const VISUAL_WIDTH = 256;  
+const APPROX_CHAR_WIDTH = 12; // Approximate width in pixels for Font 2 (Medium)
+
+// Vertical Layout (Smaller Y is higher up in your vision)
+// I spaced these out just a little bit more so it breathes nicely in the center!
+const Y_TOP = 30;  
+const Y_MID = 70;  
+const Y_BOT = 110;  
 
 // Global tracking variables for the device connection layer
 let engoDevice = null;
@@ -69,14 +73,19 @@ const RSC_CHAR_UUID     = 'rsc_measurement';
 const CMD_CLEAR = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
 
 /**
- * Helper to create an ActiveLook binary text command.
+ * Helper to create an ActiveLook binary text command with Auto-Centering.
  */
-function createActiveLookTextCmd(x, y, text) {
-    // 90-degree right rotation means the physical axes are swapped.
-    // What you think of as "Y" (up/down) is actually the physical X axis on the panel.
-    // What you think of as "X" (left/right) is actually the physical Y axis on the panel.
+function createActiveLookTextCmd(y, text) {
+    // 1. Calculate how wide the string is in pixels
+    let textPixelWidth = text.length * APPROX_CHAR_WIDTH;
+    
+    // 2. Find the center X coordinate
+    let logicalX = Math.floor((VISUAL_WIDTH - textPixelWidth) / 2);
+    if (logicalX < 0) logicalX = 0; // Prevent pushing off-screen if text is huge
+    
+    // 3. Map to physical OLED panel (90-degree right rotation swap)
     let physX = y;
-    let physY = x; 
+    let physY = logicalX; 
 
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 12 + textBytes.length;
@@ -186,9 +195,10 @@ async function initEngoDisplay() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_TOP, "LINKED"));
+        // Pass only the Y coordinates now; the script centers the X automatically!
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(Y_TOP, "ENG0 LINKED"));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_MID, "Waiting for Stryd..."));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(Y_MID, "Waiting for Stryd..."));
     } catch (error) {
         console.warn("Failed to wake up Engo display: " + error.message);
     }
@@ -329,9 +339,10 @@ function processIncomingStrydData(event) {
 async function pushLayoutToGlasses(pwr, pce, dst) {
     if (!engoRxCharacteristic) return;
     
-    let pwrFormatted = `PWR: ${pwr} W`.padEnd(12, ' ');
-    let pceFormatted = `PCE: ${pce}`.padEnd(12, ' ');
-    let dstFormatted = `DST: ${dst} mi`.padEnd(15, ' ');
+    // No more manual string padding needed! The auto-center math handles the layout perfectly.
+    let pwrFormatted = `PWR: ${pwr} W`;
+    let pceFormatted = `PCE: ${pce}`;
+    let dstFormatted = `DST: ${dst} mi`;
 
     try {
         if (!isEngoCanvasCleared) {
@@ -340,11 +351,11 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
             isEngoCanvasCleared = true;
         }
 
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_TOP, pwrFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(Y_TOP, pwrFormatted));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_MID, pceFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(Y_MID, pceFormatted));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_BOT, dstFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(Y_BOT, dstFormatted));
         
     } catch (bleWriteError) {
         console.warn("Frame transmission dropped: " + bleWriteError.message);
