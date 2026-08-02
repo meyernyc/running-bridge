@@ -64,7 +64,7 @@ const CP_CHAR_UUID      = 'cycling_power_measurement';
 const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
-function createActiveLookTextCmd(x, y, text, fontId = 0x03, colorVal = 0x0F, rot = 0x04) {
+function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 13 + textBytes.length; 
     let cmd = new Uint8Array(totalLen);
