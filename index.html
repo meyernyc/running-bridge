@@ -466,7 +466,7 @@ async function updateUI() {
         // Main Power text value in center
         const powerText = `${currentPower} W`;
         const powerTextLength = powerText.length;
-        const payloadPower = createActiveLookColorTextCmd(180, 266, powerText, powerTextLength, 0x03, powerColor);
+        const payloadPower = createActiveLookColorTextCmd(180, 166, powerText, powerTextLength, 0x03, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadPower);
         
         // Power range text displayed underneath the power number
