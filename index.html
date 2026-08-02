@@ -44,12 +44,12 @@ let engoRxCharacteristic = null;
 let strydServiceChar = null;
 let isEngoCanvasCleared = false; 
 
-// Core Service Constants
+// Core Service and Data Channel Blueprint Constants
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
-const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
+const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb8'; // TX Write Characteristic
 const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; 
 const RSC_CHAR_UUID     = 'rsc_measurement';
-
+    
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 function updateStatus(msg) {
