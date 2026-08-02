@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.13 (Time Overflow Fix)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.14 (Color Dynamic Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -282,13 +282,28 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
+        // Determine color based on Stryd power output zones
+        // 0x0F = White, 0x01 = Red, 0x02 = Green, 0x03 = Yellow, 0x04 = Blue
+        let powerColor = 0x0F; 
+        if (currentPower >= 350) {
+            powerColor = 0x01; // Red for Threshold
+        } else if (currentPower >= 250) {
+            powerColor = 0x03; // Yellow for Tempo
+        } else if (currentPower > 0) {
+            powerColor = 0x02; // Green for Base/Easy
+        }
+        
         // Top Half Display (Power value + units)
-        // Kept at 152 for true center
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(152, 226, `${currentPower} W`, 0x04));
+        // Passes dynamic powerColor
+        await engoRxCharacteristic.writeValueWithResponse(
+            createActiveLookTextCmd(152, 226, `${currentPower} W`, 0x04, powerColor)
+        );
         
         // Bottom Half Display (Distance value + units + moving time)
-        // Adjusted the startX position to 170 (moving it in the opposite direction)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
+        // Passes static Light Blue (0x04)
+        await engoRxCharacteristic.writeValueWithResponse(
+            createActiveLookTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0x04)
+        );
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
