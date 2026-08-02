@@ -22,12 +22,12 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.20 (Red-Green OLED Fix)</span></h2>
+    <h2>Engo 3 Setup <span class="version">v2.21 (Hex Palette Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
-    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test RG Display Colors</button>
+    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Grid Colors</button>
     
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -78,6 +78,11 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
+// EXACT HEX CODES FROM THE API DOCUMENTATION IMAGE
+const COLOR_GREEN  = 0xC3; 
+const COLOR_RED    = 0x3C; 
+const COLOR_YELLOW = 0xFF; 
+
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
     let h = Math.floor(totalSec / 3600);
@@ -89,14 +94,14 @@ function formatTime(ms) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Fixed for 0x3E txtColor using Red-Green 8-bit values
-function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 15, rot = 0x04) {
+// 0x3E txtColor using specific Hex 
+function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 0xFF, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 13 + textBytes.length; 
     let cmd = new Uint8Array(totalLen);
     
     cmd[0] = 0xFF;              
-    cmd[1] = 0x3E;              // 0x3E txtColor
+    cmd[1] = 0x3E;              
     cmd[2] = 0x00;              
     cmd[3] = totalLen & 0xFF;   
     
@@ -107,7 +112,7 @@ function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 15, 
     
     cmd[8] = rot & 0xFF;        
     cmd[9] = fontId & 0xFF;     
-    cmd[10] = colorVal & 0xFF;  // Engo 3 RG value (15=Green, 240=Red, 255=Yellow)
+    cmd[10] = colorVal & 0xFF;  
     
     cmd.set(textBytes, 11);
     
@@ -153,12 +158,12 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Connect text in Yellow (255)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, "LINKED", 0x02, 255));
+        // Connect text in Yellow (0xFF)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, "LINKED", 0x02, COLOR_YELLOW));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, "Waiting for Stryd...", 0x02, 255));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, "Waiting for Stryd...", 0x02, COLOR_YELLOW));
         
-        updateStatus("Glasses connected! Click 'Connect Stryd' or test RG colors.");
+        updateStatus("Glasses connected! Click 'Connect Stryd' or test grid colors.");
         
         const strydBtn = document.getElementById('btn-stryd');
         strydBtn.disabled = false;
@@ -174,14 +179,15 @@ async function connectEngoGlasses() {
 
 async function testColors() {
     if (!engoRxCharacteristic) return;
-    updateStatus("Running RG Display Test...");
+    updateStatus("Running Hex Grid Display Test...");
     
-    // 15 = Green, 240 = Red, 255 = Yellow, 248 = Orange
+    // Testing the extreme corners of the provided API image grid
     const testPalette = [
-        { id: 15, name: "Green (15)" },
-        { id: 240, name: "Red (240)" },
-        { id: 255, name: "Yellow (255)" },
-        { id: 248, name: "Orange (248)" }
+        { id: 0x01, name: "Dark Green (0x01)" },
+        { id: 0xC3, name: "Bright Green (0xC3)" },
+        { id: 0x04, name: "Dark Red (0x04)" },
+        { id: 0x3C, name: "Bright Red (0x3C)" },
+        { id: 0xFF, name: "Bright Yellow (0xFF)" }
     ]; 
     
     try {
@@ -194,10 +200,10 @@ async function testColors() {
             );
             
             await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
-            debugLog(`Displaying: ${color.name}`);
+            debugLog(`Displaying Hex: 0x${color.id.toString(16).toUpperCase()} - ${color.name}`);
             await delay(2500); 
         }
-        updateStatus("RG test complete.");
+        updateStatus("Grid test complete.");
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
     } catch (e) {
         debugLog("Test error: " + e.message);
@@ -313,18 +319,17 @@ async function updateUI() {
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    // --- RG DISPLAY COLOR LOGIC ---
-    let hudColorId;
+    let hudColorHex;
     let webColorCode;
 
     if (currentPower === 0) {
-        hudColorId = 255; // Yellow when stopped
+        hudColorHex = COLOR_YELLOW; 
         webColorCode = "#ffeb3b";
     } else if (currentPower >= 200 && currentPower <= 250) {
-        hudColorId = 15; // Green
+        hudColorHex = COLOR_GREEN; 
         webColorCode = "#4caf50";
     } else {
-        hudColorId = 240; // Red (Under 200 or Over 250)
+        hudColorHex = COLOR_RED; 
         webColorCode = "#f44336";
     }
 
@@ -339,12 +344,12 @@ async function updateUI() {
         
         // Top Half (Power Zone)
         await engoRxCharacteristic.writeValueWithResponse(
-            createActiveLookColorTextCmd(152, 226, `${currentPower} W`, 0x04, hudColorId)
+            createActiveLookColorTextCmd(152, 226, `${currentPower} W`, 0x04, hudColorHex)
         );
         
-        // Bottom Half (Distance & Time in Yellow [255])
+        // Bottom Half (Distance & Time in Yellow)
         await engoRxCharacteristic.writeValueWithResponse(
-            createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 255)
+            createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, COLOR_YELLOW)
         );
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
