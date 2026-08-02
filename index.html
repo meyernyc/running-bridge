@@ -466,18 +466,18 @@ async function updateUI() {
         // Main Power text value in center
         const powerText = `${currentPower} W`;
         const powerTextLength = powerText.length;
-        const payloadPower = createActiveLookColorTextCmd(100, 120, powerText, powerTextLength, 0x03, powerColor);
+        const payloadPower = createActiveLookColorTextCmd(180, 266, powerText, powerTextLength, 0x03, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadPower);
         
         // Power range text displayed underneath the power number
         const rangeTextLen = rangeText.length;
-        const payloadRange = createActiveLookColorTextCmd(100, 61, rangeText, rangeTextLen, 0x01, 0x3C);
+        const payloadRange = createActiveLookColorTextCmd(180, 120, rangeText, rangeTextLen, 0x01, 0x3C);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadRange);
         
         // Distance & Time secondary line
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
         const secTextLen = secText.length;
-        const payloadSec = createActiveLookColorTextCmd(100, 25, secText, secTextLen, 0x01, 0x7D);
+        const payloadSec = createActiveLookColorTextCmd(180, 50, secText, secTextLen, 0x01, 0x7D);
         await engoRxCharacteristic.writeValueWithoutResponse(payloadSec);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
