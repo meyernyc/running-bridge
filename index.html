@@ -15,18 +15,20 @@
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
         .version { font-size: 14px; color: #888; font-weight: normal; margin-left: 10px; }
+        .note { font-size: 12px; color: #888; margin-top: 10px; font-style: italic; }
         
         /* Added for debugging GATT payloads directly on phone */
         .debug-panel { margin-top: 20px; padding: 15px; background: #000; border: 1px solid #333; font-family: monospace; font-size: 11px; color: #00ff00; border-radius: 5px; height: 100px; overflow-y: auto; }
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.08 (Large Power Font)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.09 (Green Power & Gauge)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
     <div id="status">Waiting to start...</div>
+    <div class="note">Note: Engo 2 glasses are monochrome (colors manifest as luma/brightness). Color displays natively on Engo 3.</div>
     <div class="dashboard">
         <div class="metric">
             <div id="view-pwr" class="metric-value">-- W</div>
@@ -67,6 +69,7 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
+// Generates the text command payload
 function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 13 + textBytes.length; 
@@ -91,6 +94,28 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot
     cmd[totalLen - 2] = 0x00;   
     cmd[totalLen - 1] = 0xAA;   
     
+    return cmd;
+}
+
+// Generates the filled rectangle payload (Command ID 0x35)
+function createActiveLookRectfCmd(x0, y0, x1, y1) {
+    let cmd = new Uint8Array(13);
+    cmd[0] = 0xFF;              
+    cmd[1] = 0x35;              // Command ID for rectf
+    cmd[2] = 0x00;              
+    cmd[3] = 0x0D;              // Total length (13 bytes)
+    
+    cmd[4] = (x0 >> 8) & 0xFF;   
+    cmd[5] = x0 & 0xFF;          
+    cmd[6] = (y0 >> 8) & 0xFF;   
+    cmd[7] = y0 & 0xFF;          
+    
+    cmd[8] = (x1 >> 8) & 0xFF;   
+    cmd[9] = x1 & 0xFF;          
+    cmd[10] = (y1 >> 8) & 0xFF;   
+    cmd[11] = y1 & 0xFF; 
+    
+    cmd[12] = 0xAA;   
     return cmd;
 }
 
@@ -130,7 +155,7 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Initial messages restored to x=294 (original offset position, not centered)
+        // Initial connection messages
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
         await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd..."));
@@ -240,23 +265,31 @@ async function updateUI() {
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
 
-    // 2. Update HUD (Power in top half, Distance in bottom half - Centered)
+    // 2. Update HUD
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // 152 is exactly half of the 304 pixel wide display
-        const startX = 152;
+        const startX = 152; // Centered X coordinate
         
-        // Top Half Display (Power value + units)
-        // Using fontId 0x04 (Font 4 - 75px spacing) to increase the size!
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
+        // --- POWER GAUGE (Top of screen) ---
+        // Assuming 500W is the max for the gauge. Adjust if your max power is higher/lower.
+        const maxPower = 500; 
+        const barWidth = Math.max(0, Math.min(304, Math.floor((currentPower / maxPower) * 304)));
         
-        // Bottom Half Display (Distance value + units)
-        // Kept at default fontId (0x02)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi`));
+        // Draw the filled rectangle bar from left to right (y: 240 to 255 puts it at the top edge)
+        if (barWidth > 0) {
+            await engoRxCharacteristic.writeValueWithResponse(createActiveLookRectfCmd(0, 240, barWidth, 255));
+        }
+
+        // --- METRICS ---
+        // Top Half Display (Power). Font 4 (large). Color 0x02 is mapped to Green on compatible color displays.
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04, 0x02));
+        
+        // Bottom Half Display (Distance). Font 2 (default). Color 0x0F (Max White/Brightness).
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi`, 0x02, 0x0F));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
