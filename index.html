@@ -10,15 +10,22 @@
         .metric { text-align: center; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
-        button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        .btn-group { display: flex; flex-direction: column; gap: 10px; }
+        button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         button:active { background-color: #1976D2; }
+        button:disabled { background-color: #555; color: #888; cursor: not-allowed; }
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; line-height: 1.4; }
     </style>
 </head>
 <body>
 
     <h2>Run HUD Setup</h2>
-    <button onclick="initializeBridge()">Connect Devices & Start Run</button>
+    
+    <div class="btn-group">
+        <button id="btn-engo" onclick="connectEngoStep()">1. Connect Engo Glasses</button>
+        <button id="btn-stryd" onclick="connectStrydStep()" disabled>2. Connect Stryd Pod</button>
+    </div>
+
     <div id="status">Waiting to start...</div>
 
     <div class="dashboard">
@@ -40,16 +47,16 @@
 // Global tracking variables
 let engoDevice = null;
 let strydDevice = null;
-let engoRxCharacteristic = null;
+let engoRxCharacteristic = null; // We are calling our variable RX, but binding it to the TX UUID
 let strydServiceChar = null;
 let isEngoCanvasCleared = false; 
 
-// Core Service and Data Channel Blueprint Constants
+// Core Service Constants
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
-const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb8'; // TX Write Characteristic
+const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb8'; // Corrected TX Write Characteristic
 const RSC_SERVICE_UUID  = 'running_speed_and_cadence'; 
 const RSC_CHAR_UUID     = 'rsc_measurement';
-    
+
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 function updateStatus(msg) {
@@ -69,16 +76,14 @@ async function robustConnect(device, primaryServiceUUID, charUUID, deviceName, f
         try {
             updateStatus(`Connecting to ${deviceName} (Attempt ${i + 1}/${retries})...`);
             
-            // Clean slate: if the OS thinks it's connected from a ghost session, disconnect it first
             if (device.gatt.connected) {
                 device.gatt.disconnect();
                 await delay(500);
             }
 
             const server = await device.gatt.connect();
-            await delay(1000); // Crucial wait time for the OS to finalize the connection
+            await delay(1000); 
 
-            // Check if the connection dropped in the background during the delay
             if (!device.gatt.connected) {
                 throw new Error("Connection dropped during stabilization.");
             }
@@ -108,11 +113,10 @@ async function robustConnect(device, primaryServiceUUID, charUUID, deviceName, f
 }
 
 /**
- * Initializes the dual Bluetooth connection pipeline safely.
+ * Step 1: Connect the Engo Glasses
  */
-async function initializeBridge() {
+async function connectEngoStep() {
     try {
-        // 1. Setup Engo Glasses
         updateStatus("Scanning for Engo 3 Glasses...");
         engoDevice = await navigator.bluetooth.requestDevice({
             filters: [{ namePrefix: 'ENGO' }, { namePrefix: 'engo' }, { namePrefix: 'A.LooK' }],
@@ -122,11 +126,26 @@ async function initializeBridge() {
         engoRxCharacteristic = await robustConnect(engoDevice, ENGO_SERVICE_UUID, ENGO_CHAR_UUID, "Engo Glasses");
         isEngoCanvasCleared = false; 
         
-        // ONLY attach the disconnect listener after a completely successful binding
         engoDevice.addEventListener('gattserverdisconnected', onEngoDisconnected);
         
-        // 2. Setup Stryd Pod
-        updateStatus("Glasses connected! Scanning for Stryd Footpod (Shake pod to wake)...");
+        // Update UI for the next step
+        document.getElementById('btn-engo').innerText = "Engo Connected ✓";
+        document.getElementById('btn-engo').disabled = true;
+        document.getElementById('btn-stryd').disabled = false;
+        
+        updateStatus("Glasses connected! Now click Step 2 to connect the Stryd Pod.");
+        
+    } catch (error) {
+        updateStatus("Connection Failure: " + error.message);
+    }
+}
+
+/**
+ * Step 2: Connect the Stryd Pod
+ */
+async function connectStrydStep() {
+    try {
+        updateStatus("Scanning for Stryd Footpod (Shake pod to wake)...");
         strydDevice = await navigator.bluetooth.requestDevice({
             filters: [{ namePrefix: 'Stryd' }, { namePrefix: 'STRYD' }, { namePrefix: 'stryd' }],
             optionalServices: [RSC_SERVICE_UUID, '00001814-0000-1000-8000-00805f9b34fb', 'cycling_power']
@@ -134,12 +153,13 @@ async function initializeBridge() {
         
         strydServiceChar = await robustConnect(strydDevice, RSC_SERVICE_UUID, RSC_CHAR_UUID, "Stryd Pod", '00001814-0000-1000-8000-00805f9b34fb');
         
-        // ONLY attach the disconnect listener after a completely successful binding
         strydDevice.addEventListener('gattserverdisconnected', onStrydDisconnected);
         
-        // 3. Start Data Stream
         await strydServiceChar.startNotifications();
         strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
+        
+        document.getElementById('btn-stryd').innerText = "Stryd Connected ✓";
+        document.getElementById('btn-stryd').disabled = true;
         
         updateStatus("Bridge fully active! Ready to run.");
         
