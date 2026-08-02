@@ -19,7 +19,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v1.5</span></h2>
+    <h2>Run HUD Setup <span class="version">v1.6</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -46,11 +46,11 @@
 const DISPLAY_WIDTH = 304;   // Engo 3 native width
 const DISPLAY_HEIGHT = 256;  // Engo 3 native height
 
-// Logical Layout: We map coordinates logically based on your vision.
-const X_LEFT = 10;
-const Y_TOP = 80;  
+// Logical Layout: Smaller Y is higher in your vision, smaller X is further left.
+const X_LEFT = 20; 
+const Y_TOP = 20;  
 const Y_MID = 50;  
-const Y_BOT = 20;  
+const Y_BOT = 80;  
 
 // Global tracking variables for the device connection layer
 let engoDevice = null;
@@ -72,11 +72,11 @@ const CMD_CLEAR = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
  * Helper to create an ActiveLook binary text command.
  */
 function createActiveLookTextCmd(x, y, text) {
-    // Because the optics are mounted upside down natively, we MUST rotate 180 degrees (0x02).
-    // But rotating 180 means it draws backwards, so we have to flip the X/Y origin 
-    // to the opposite side of the display buffer to keep the text visible on screen!
-    let physX = DISPLAY_WIDTH - x;
-    let physY = DISPLAY_HEIGHT - y;
+    // 90-degree right rotation means the physical axes are swapped.
+    // What you think of as "Y" (up/down) is actually the physical X axis on the panel.
+    // What you think of as "X" (left/right) is actually the physical Y axis on the panel.
+    let physX = y;
+    let physY = x; 
 
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 12 + textBytes.length;
@@ -90,7 +90,7 @@ function createActiveLookTextCmd(x, y, text) {
     cmd[5] = physX & 0xFF;         
     cmd[6] = (physY >> 8) & 0xFF;  
     cmd[7] = physY & 0xFF;         
-    cmd[8] = 0x02;             // 180-degree rotation
+    cmd[8] = 0x01;             // 0x01 = 90-degree Right Rotation
     cmd[9] = 0x02;             // Font ID (2 = Medium)
     cmd[10] = 0x0F;            // Color (15 = White)
     
@@ -138,7 +138,6 @@ async function connectEngoGlasses() {
         
         updateStatus("Glasses connected! Now click 'Connect Stryd'.");
         
-        // Enable the second button now that the first is connected
         const strydBtn = document.getElementById('btn-stryd');
         strydBtn.disabled = false;
         strydBtn.style.backgroundColor = '#2196F3'; 
@@ -178,17 +177,15 @@ async function connectStrydPod() {
 }
 
 /**
- * Wakes up the Engo display and clears the "Searching" screen using Binary Commands
+ * Wakes up the Engo display and clears the "Searching" screen
  */
 async function initEngoDisplay() {
     if (!engoRxCharacteristic) return;
     
     try {
-        // Clear screen
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
-        // Write status text (using the top and middle layout rows)
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_TOP, "LINKED"));
         await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_MID, "Waiting for Stryd..."));
@@ -198,7 +195,7 @@ async function initEngoDisplay() {
 }
 
 /**
- * Helper to connect/reconnect to Engo Glasses with retry logic for GATT drops
+ * Helper to connect/reconnect to Engo Glasses
  */
 async function connectEngo(retries = 5) {
     updateStatus("Connecting to ActiveLook engine...");
@@ -210,20 +207,18 @@ async function connectEngo(retries = 5) {
             engoRxCharacteristic = await engoService.getCharacteristic(ENGO_CHAR_UUID);
             isEngoCanvasCleared = false; 
             
-            // WAKE UP THE SCREEN
             await initEngoDisplay();
-
-            return; // Success
+            return; 
         } catch (error) {
              updateStatus(`Engo GATT fetch failed, retrying (${i+1}/${retries})...`);
              await delay(1500);
         }
     }
-    throw new Error("Failed to fetch Engo GATT services after multiple attempts.");
+    throw new Error("Failed to fetch Engo GATT services.");
 }
 
 /**
- * Helper to connect/reconnect to Stryd Pod with retry logic for GATT drops
+ * Helper to connect/reconnect to Stryd Pod
  */
 async function connectStryd(retries = 5) {
     updateStatus("Connecting to Stryd Footpod...");
@@ -242,17 +237,17 @@ async function connectStryd(retries = 5) {
             strydServiceChar = await strydService.getCharacteristic(RSC_CHAR_UUID);
             await strydServiceChar.startNotifications();
             strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingStrydData);
-            return; // Success
+            return; 
         } catch (error) {
              updateStatus(`Stryd GATT fetch failed, retrying (${i+1}/${retries})...`);
              await delay(1500);
         }
     }
-     throw new Error("Failed to fetch Stryd GATT services after multiple attempts.");
+     throw new Error("Failed to fetch Stryd GATT services.");
 }
 
 /**
- * Auto-reconnect handler for Engo Glasses
+ * Auto-reconnect handlers
  */
 async function onEngoDisconnected() {
     updateStatus("Engo Glasses disconnected. Attempting to reconnect...");
@@ -260,25 +255,22 @@ async function onEngoDisconnected() {
         await connectEngo();
         updateStatus("Engo Glasses reconnected successfully.");
     } catch (error) {
-        updateStatus("Could not reconnect to Engo Glasses. Please manually restart.");
+        updateStatus("Could not reconnect to Engo Glasses.");
     }
 }
 
-/**
- * Auto-reconnect handler for Stryd Pod
- */
 async function onStrydDisconnected() {
     updateStatus("Stryd Pod disconnected. Attempting to reconnect...");
     try {
         await connectStryd();
         updateStatus("Stryd Pod reconnected successfully.");
     } catch (error) {
-        updateStatus("Could not reconnect to Stryd Pod. Please manually restart.");
+        updateStatus("Could not reconnect to Stryd Pod.");
     }
 }
 
 /**
- * Handles incoming binary packets coming directly from the Stryd pod hardware layer.
+ * Handles incoming binary packets from Stryd
  */
 function processIncomingStrydData(event) {
     let dataView = event.target.value;
@@ -289,7 +281,7 @@ function processIncomingStrydData(event) {
     
     let byteOffset = 1;
     
-    // 1. Calculate Live Running Pace
+    // Pace
     let rawSpeed = dataView.getUint16(byteOffset, true);
     byteOffset += 2;
     
@@ -304,15 +296,13 @@ function processIncomingStrydData(event) {
         paceStr = `${paceMin}:${paceSec}`;
     }
     
-    // 2. Shift past basic Cadence tracking metrics
     byteOffset += 1;
     
-    // 3. Shift past Stride Length if flag index is checked
     if (strideLengthPresent) {
         byteOffset += 2;
     }
     
-    // 4. Extract Total Accumulated Run Distance
+    // Distance
     let distanceMiles = "0.00";
     if (totalDistancePresent) {
         let totalMeters = dataView.getUint32(byteOffset, true) / 10;
@@ -320,23 +310,21 @@ function processIncomingStrydData(event) {
         byteOffset += 4;
     }
     
-    // 5. Parse Real-Time Running Power
+    // Power
     let powerWatts = 0;
     if (byteOffset < dataView.byteLength) {
         powerWatts = dataView.getUint16(byteOffset, true);
     }
     
-    // 6. Push values directly onto the phone's web dashboard
     document.getElementById('view-pwr').innerText = `${powerWatts} W`;
     document.getElementById('view-pce').innerText = paceStr;
     document.getElementById('view-dst').innerText = `${distanceMiles} mi`;
     
-    // 7. Hand parameters down to the ActiveLook glass rendering encoder
     pushLayoutToGlasses(powerWatts, paceStr, distanceMiles);
 }
 
 /**
- * Encodes layout strings and pushes binary commands to the ActiveLook Engine
+ * Pushes binary commands to ActiveLook Engine
  */
 async function pushLayoutToGlasses(pwr, pce, dst) {
     if (!engoRxCharacteristic) return;
@@ -352,7 +340,6 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
             isEngoCanvasCleared = true;
         }
 
-        // Send layout frames sequentially using the mapped top-down logic
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_TOP, pwrFormatted));
         await delay(50);
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(X_LEFT, Y_MID, pceFormatted));
