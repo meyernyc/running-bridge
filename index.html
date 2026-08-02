@@ -32,7 +32,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v3.2</span> 🌟</h2>
+    <h2>Engo 3 Setup <span class="version">v3.3 (Dynamic Gauge Color)</span> 🌟</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -117,7 +117,6 @@ let cfgVersion = 1;
 const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
-const CMD_SET_GAUGE_COLOR = new Uint8Array([0xFF, 0x3D, 0x00, 0x05, 0x01, 0xAA]); 
 
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x04;
@@ -193,10 +192,7 @@ function getCurrentStepInfo() {
                 let nMax = parseInt(rows[i+1].querySelector('.w-max').value) || 0;
                 let nTime = parseFloat(rows[i+1].querySelector('.w-time').value) || 0;
                 
-                // For the single-line Web Dashboard
                 current.nextText = `${nMin}-${nMax}W @ ${nTime}m`;
-                
-                // For the multi-line HUD
                 current.nextPowerText = `Next: ${nMin}-${nMax} W`;
                 current.nextTimeText = `for ${nTime} min`;
             }
@@ -214,6 +210,26 @@ function getCurrentStepInfo() {
     current.duration = 1;
     current.remaining = 0;
     return current;
+}
+
+/**
+ * Generates an ActiveLook compliant serialized byte array package 
+ * to alter the specific layout parameters of an on-screen widget.
+ */
+function createGaugeColorCmd(gaugeId, colorIndex) {
+    const CMD_SET_GAUGE_COLOR = 0x42; 
+    
+    // Framed specifically for the ActiveLook BLE transport requirement:
+    // [0xFF (start), CMD, 0x00, Length, ...Params, 0xAA (end)]
+    return new Uint8Array([
+        0xFF, 
+        CMD_SET_GAUGE_COLOR, 
+        0x00, 
+        0x02, 
+        gaugeId & 0xFF, 
+        colorIndex & 0xFF, 
+        0xAA
+    ]);
 }
 
 function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
@@ -424,7 +440,6 @@ async function updateUI() {
     let nextPwrText = stepInfo.nextPowerText;
     let nextTimeText = stepInfo.nextTimeText;
 
-    // Update Web Dashboard (Single line for Next)
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
@@ -443,26 +458,20 @@ async function updateUI() {
         
         if (isGaugeInitialized) {
             let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
-            await engoRxCharacteristic.writeValueWithoutResponse(CMD_SET_GAUGE_COLOR);
+            // Now pushing dynamic color directly to Gauge ID 1 using opcode 0x42
+            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, powerColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // 1. Power Value (Center, y=180)
         const powerText = `${currentPower} W`;
         await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(220, 180, powerText, powerText.length, 0x03, powerColor));
-        
-        // 2. Current Step Target Range (y=135)
         await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(210, 135, rangeText, rangeText.length, 0x01, 0x3C));
-        
-        // 3. Next Step Power line (y=100)
         await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(205, 100, nextPwrText, nextPwrText.length, 0x01, 0x39));
         
-        // 4. Next Step Time line (y=75)
         if (nextTimeText !== "") {
             await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(202, 75, nextTimeText, nextTimeText.length, 0x01, 0x39));
         }
         
-        // 5. Time & Distance Secondary line (y=45)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
         await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(198, 45, secText, secText.length, 0x01, 0x3C));
         
