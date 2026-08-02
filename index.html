@@ -19,7 +19,7 @@
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v2.5 (Optical Flip)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.6 (Increased Spacing)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -150,9 +150,10 @@ async function initEngoDisplay() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         // Start X near 304, Start Y near 256 for top-left rendering via mirror reflection
+        // Spacing increased to 45px (226 -> 181)
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 196, "Waiting for Stryd..."));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd..."));
     } catch (error) {
         console.warn("Failed to wake up Engo display: " + error.message);
     }
@@ -272,11 +273,11 @@ async function pushLayoutToGlasses(pwr, pce, dst) {
         }
 
         // X = 294 sets text flush against the "Left" side in the optical reflection
-        // Y = 226, 196, 166 sets text starting from the "Top" downward in the optical reflection
+        // Gap increased from 30px to 45px (226 -> 181 -> 136)
         const startX = 294;
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, pwrFormatted));
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 196, pceFormatted));
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 166, dstFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 181, pceFormatted));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, dstFormatted));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
         
