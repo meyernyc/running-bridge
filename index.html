@@ -201,11 +201,6 @@ async function connectEngoStep() {
         });
 
         engoTxCharacteristic = await robustConnect(engoDevice, ENGO_SERVICE_UUID, ENGO_TX_CHAR_UUID, "Engo Glasses");
-        
-        // Push configuration packet sequence to unlock the HUD layer from the "Searching..." screen
-        let initPacket = new Uint8Array([0xFF, 0x02, 0x00, 0x05, 0xAA]);
-        await engoTxCharacteristic.writeValueWithResponse(initPacket);
-        
         isEngoCanvasCleared = false;
         engoDevice.addEventListener('gattserverdisconnected', onEngoDisconnected);
 
@@ -251,10 +246,6 @@ async function onEngoDisconnected() {
     updateStatus("HUD connection lost. Executing reconnect loops...");
     try {
         engoTxCharacteristic = await robustConnect(engoDevice, ENGO_SERVICE_UUID, ENGO_TX_CHAR_UUID, "Engo Glasses");
-        
-        let initPacket = new Uint8Array([0xFF, 0x02, 0x00, 0x05, 0xAA]);
-        await engoTxCharacteristic.writeValueWithResponse(initPacket);
-        
         isEngoCanvasCleared = false;
         updateStatus("HUD reconnected.");
     } catch (error) {
@@ -290,3 +281,17 @@ function processIncomingStrydData(event) {
     let paceStr = "--:--";
 
     if (speedMps > 0.447) {
+        let mph = speedMps * 2.23694;
+        let decimalPace = 60 / mph;
+        let paceMin = Math.floor(decimalPace);
+        let paceSec = Math.floor((decimalPace - paceMin) * 60).toString().padStart(2, '0');
+        paceStr = `${paceMin}:${paceSec}`;
+    }
+
+    byteOffset += 1; // Step over Cadence byte
+
+    if (strideLengthPresent) {
+        byteOffset += 2;
+    }
+
+    let distanceMiles = "0.00";
