@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.11 (Bottom Font Fix)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.13 (HH:MM:SS Format)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -41,7 +41,7 @@
             <div class="metric-label">Distance</div>
         </div>
         <div class="metric">
-            <div id="view-tim" class="metric-value">0:00</div>
+            <div id="view-tim" class="metric-value">00:00:00</div>
             <div class="metric-label">Time</div>
         </div>
     </div>
@@ -63,7 +63,7 @@ let isUpdatingHUD = false;
 // Time tracking variables
 let movingTimeMilli = 0;
 let lastRscTime = 0;
-let currentMovingTimeStr = "0:00";
+let currentMovingTimeStr = "00:00:00";
 
 const ENGO_SERVICE_UUID = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba'; 
@@ -81,10 +81,9 @@ function formatTime(ms) {
     let h = Math.floor(totalSec / 3600);
     let m = Math.floor((totalSec % 3600) / 60);
     let s = totalSec % 60;
-    if (h > 0) {
-        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    return `${m}:${s.toString().padStart(2, '0')}`;
+    
+    // Always format as HH:MM:SS
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
 function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
@@ -275,23 +274,22 @@ async function updateUI() {
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    // 2. Update HUD (Power in top half, Distance & Time in bottom half - Centered)
+    // 2. Update HUD
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // 152 is exactly half of the 304 pixel wide display
-        const startX = 152;
+        const centerX = 152; // For centered text
+        const leftX = 15;    // A bit of padding off the pure left edge
         
-        // Top Half Display (Power value + units)
-        // Using fontId 0x04 (Font 4 - 75px spacing) to keep it nice and large
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
+        // Top Half Display (Power value) - Centered (rot = 0x04)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(centerX, 226, `${currentPower} W`, 0x04, 0x0F, 0x04));
         
-        // Bottom Half Display (Distance value + units + moving time)
-        // Set fontId to 0x01 (Font 1) to shrink text and prevent clipping!
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
+        // Bottom Half Display (Distance | Time) 
+        // Font 1 (0x01), Left-Aligned (rot = 0x03), anchored to leftX (15)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(leftX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0x0F, 0x03));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
