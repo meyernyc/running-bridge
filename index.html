@@ -28,22 +28,21 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.29 (BLE Optimized Tx)</span> 🌟</h2>
+    <h2>Engo 3 Setup <span class="version">v2.30 (Time Gauge Edition)</span> 🌟</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
     
     <div class="config-panel">
-        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Power Range Configuration</h3>
+        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Target Configuration 🎯</h3>
         <div class="config-row">
             <label>Target Power Range (Green inside, Bright Red outside):</label>
             <input type="number" id="pwr-min" value="200"> to <input type="number" id="pwr-max" value="250">
         </div>
-        <!-- Modified section for Min and Max gauge values -->
         <div class="config-row">
-            <label>Gauge Power Bounds (0% to 100% scale):</label>
-            <input type="number" id="pwr-scale-min" value="0"> to <input type="number" id="pwr-scale" value="400">
+            <label>Target Duration (Minutes):</label>
+            <input type="number" id="target-time-min" value="30" min="1">
         </div>
     </div>
     
@@ -71,6 +70,7 @@
     <div class="debug-panel" id="debug-log">
         [Hardware Stream Logs]<br>
     </div>
+
 <script>
 let engoDevice = null;
 let strydDevice = null;
@@ -128,10 +128,8 @@ function formatTime(ms) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Updated Helper Signature to accept explicit string length
 function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
-    // Ensure we use the exact byte length passed in to correctly frame the packet
     let safeLength = Math.min(textBytes.length, textLength);
     let totalLen = 13 + safeLength; 
     
@@ -151,11 +149,10 @@ function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, col
     cmd[9] = fontId & 0xFF;     
     cmd[10] = colorVal & 0xFF;  
     
-    // Copy the exact text bytes based on our dynamic length calculation
     cmd.set(textBytes.slice(0, safeLength), 11);
     
-    cmd[totalLen - 2] = 0x00; // Null terminator buffer  
-    cmd[totalLen - 1] = 0xAA; // ActiveLook End Packet ID
+    cmd[totalLen - 2] = 0x00;   
+    cmd[totalLen - 1] = 0xAA;   
     
     return cmd;
 }
@@ -286,7 +283,6 @@ async function connectEngoGlasses() {
             debugLog("Warning: could not subscribe to Control channel: " + ctrlError.message);
         }
         
-        // Setup commands still use withResponse to guarantee configuration is written to flash safely
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
         
@@ -436,7 +432,6 @@ function processIncomingCP(event) {
     updateUI();
 }
 
-// Highly optimized drawing loop utilizing Write Without Response
 async function updateUI() {
     let pwrMin = document.getElementById('pwr-min').value || "200";
     let pwrMax = document.getElementById('pwr-max').value || "250";
@@ -452,18 +447,18 @@ async function updateUI() {
     isUpdatingHUD = true;
     
     try {
-        // Switched to writeValueWithoutResponse to prevent BLE bottlenecks
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_CLEAR);
         
         let powerColor = getPowerColor(currentPower);
         
         if (isGaugeInitialized) {
-            // Modified logic to use dynamic min/max scale values
-            let minScale = parseFloat(document.getElementById('pwr-scale-min').value) || 0;
-            let maxScale = parseFloat(document.getElementById('pwr-scale').value) || 400;
-            let scaleRange = maxScale - minScale;
-            let percent = scaleRange > 0 ? ((currentPower - minScale) / scaleRange) * 100 : 0;
+            // Target time countdown gauge calculation (Starts full at 100%, decreases to 0%)
+            let targetMinutes = parseFloat(document.getElementById('target-time-min').value) || 30;
+            let targetMilli = targetMinutes * 60 * 1000;
+            let remainingMilli = Math.max(0, targetMilli - movingTimeMilli);
+            let percent = targetMilli > 0 ? (remainingMilli / targetMilli) * 100 : 0;
+            
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
