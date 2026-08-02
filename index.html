@@ -6,28 +6,51 @@
     <title>Stryd to Engo 3 HUD Bridge</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
-        .dashboard { display: flex; justify-content: space-between; margin-top: 30px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
+        .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
         .metric { text-align: left; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .config-panel { margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 10px; }
+        .config-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; justify-content: space-between; }
+        .config-row label { font-size: 13px; color: #ccc; flex: 1; }
+        .config-row input { width: 70px; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 5px; border-radius: 4px; text-align: center; }
+        
         button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
         button:active { background-color: #1976D2; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-test { background-color: #9C27B0; margin-top: 10px; }
         .btn-test:active { background-color: #7B1FA2; }
+        
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
         .version { font-size: 14px; color: #888; font-weight: normal; margin-left: 10px; }
-        
         .debug-panel { margin-top: 20px; padding: 15px; background: #000; border: 1px solid #333; font-family: monospace; font-size: 11px; color: #00ff00; border-radius: 5px; height: 100px; overflow-y: auto; }
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.19 (Custom Power Color Gradient)</span></h2>
+    <h2>Engo 3 Setup <span class="version">v2.20 (Dynamic Power Zone Config)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
-    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Custom Color Gradient</button>
+    
+    <div class="config-panel">
+        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Power Zone Configuration</h3>
+        <div class="config-row">
+            <label>Zone 1 (Dark to Light Red) Max Power:</label>
+            <input type="number" id="z1-max" value="49">
+        </div>
+        <div class="config-row">
+            <label>Zone 2 (Dark Green) Range:</label>
+            <input type="number" id="z2-min" value="50"> to <input type="number" id="z2-max" value="75">
+        </div>
+        <div class="config-row">
+            <label>Zone 3 (Light to Dark Red) Max Power:</label>
+            <input type="number" id="z3-max" value="400">
+        </div>
+    </div>
+
+    <button id="btn-test" class="btn-test" onclick="testColors()" disabled style="background-color: #555;">Test Dynamic Gradient Ranges</button>
     
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
@@ -78,7 +101,6 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-// Pure Red column and Green column extracts from the chart palette for gradient mapping
 const RED_COLUMN = [0x00, 0x04, 0x20, 0x14, 0x18, 0x28, 0x1C, 0x38, 0x3C];
 const GREEN_COLUMN = [0x03, 0x47, 0x63, 0x57, 0x5B, 0x6B, 0x5F, 0x7B, 0x7F, 0x83, 0x87, 0xA3, 0x97, 0x9B, 0xAB, 0x9F, 0xBB, 0xBF, 0xC3, 0xC7, 0xE3, 0xD7, 0xDB, 0xEB, 0xDF, 0xFB, 0xFF];
 
@@ -99,7 +121,7 @@ function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F
     let cmd = new Uint8Array(totalLen);
     
     cmd[0] = 0xFF;              
-    cmd[1] = 0x3E;              // 0x3E = txtColor (Requires Engo 3 Color Display)
+    cmd[1] = 0x3E;              
     cmd[2] = 0x00;              
     cmd[3] = totalLen & 0xFF;   
     
@@ -110,7 +132,7 @@ function createActiveLookColorTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F
     
     cmd[8] = rot & 0xFF;        
     cmd[9] = fontId & 0xFF;     
-    cmd[10] = colorVal & 0xFF;  // 8-bit Color Value (0-255)
+    cmd[10] = colorVal & 0xFF;  
     
     cmd.set(textBytes, 11);
     
@@ -174,38 +196,44 @@ async function connectEngoGlasses() {
     }
 }
 
-// Custom power color mapping based on your specified power brackets and gradient directions
+// Dynamic configuration-driven power color gradient calculation
 function getPowerColor(power) {
     if (power <= 0) return 0x00; // Off/Black when stopped
 
-    if (power >= 1 && power <= 49) {
-        // Power 1 to 49: Darkest red to lightest red (forward slice of RED_COLUMN)
-        let progress = (power - 1) / (49 - 1);
+    let z1Max = parseInt(document.getElementById('z1-max').value) || 49;
+    let z2Min = parseInt(document.getElementById('z2-min').value) || 50;
+    let z2Max = parseInt(document.getElementById('z2-max').value) || 75;
+    let z3Max = parseInt(document.getElementById('z3-max').value) || 400;
+
+    if (power >= 1 && power <= z1Max) {
+        let progress = (power - 1) / (z1Max - 1 || 1);
         let index = Math.floor(progress * (RED_COLUMN.length - 1));
         return RED_COLUMN[index];
     } 
-    else if (power >= 50 && power <= 75) {
-        // Power 50 to 75: Darkest green (using start of GREEN_COLUMN)
+    else if (power >= z2Min && power <= z2Max) {
         return GREEN_COLUMN[0];
     } 
-    else if (power >= 76 && power <= 400) {
-        // Power 76 to 400: Lightest red down to darkest red (reversed slice of RED_COLUMN)
-        let progress = (power - 76) / (400 - 76);
+    else if (power > z2Max && power <= z3Max) {
+        let progress = (power - (z2Max + 1)) / (z3Max - (z2Max + 1) || 1);
         let index = Math.floor((1.0 - progress) * (RED_COLUMN.length - 1));
         return RED_COLUMN[index];
     } 
-    else {
-        // Above 400W: Cap at darkest red end point
+    else if (power > z3Max) {
         return RED_COLUMN[RED_COLUMN.length - 1];
     }
+    return RED_COLUMN[0];
 }
 
 async function testColors() {
     if (!engoRxCharacteristic) return;
-    updateStatus("Testing Custom Power Gradient Ranges...");
+    updateStatus("Testing Dynamic Range Configuration...");
     
-    // Test key milestone power values across your defined ranges
-    const testPowers = [0, 1, 25, 49, 50, 65, 75, 76, 200, 400];
+    let z1Max = parseInt(document.getElementById('z1-max').value) || 49;
+    let z2Min = parseInt(document.getElementById('z2-min').value) || 50;
+    let z2Max = parseInt(document.getElementById('z2-max').value) || 75;
+    let z3Max = parseInt(document.getElementById('z3-max').value) || 400;
+    
+    const testPowers = [1, Math.floor(z1Max / 2), z1Max, z2Min, Math.floor((z2Min + z2Max) / 2), z2Max, z2Max + 1, Math.floor((z2Max + 1 + z3Max) / 2), z3Max];
     
     try {
         for (let pwr of testPowers) {
@@ -221,7 +249,7 @@ async function testColors() {
             debugLog(`Power: ${pwr}W mapped to Color Hex: 0x${colorVal.toString(16).toUpperCase().padStart(2, '0')}`);
             await delay(1500); 
         }
-        updateStatus("Custom gradient test complete.");
+        updateStatus("Dynamic range test complete.");
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
     } catch (e) {
         debugLog("Test error: " + e.message);
@@ -333,7 +361,7 @@ async function updateUI() {
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
-    document.getElementById('view-tim').innerText = currentMovingTimeStr;
+    document.ей = document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
@@ -341,15 +369,12 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // Get custom gradient color based on exact power criteria rules
         let powerColor = getPowerColor(currentPower);
 
-        // Top Half (Power with custom gradient transition color)
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookColorTextCmd(152, 226, `${currentPower} W`, 0x04, powerColor)
         );
         
-        // Bottom Half (Distance & Time in bright highlight green)
         await engoRxCharacteristic.writeValueWithResponse(
             createActiveLookColorTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0xFF)
         );
