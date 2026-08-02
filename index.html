@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.12 (Left Aligned Bottom Line)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.11 (Bottom Font Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -275,22 +275,23 @@ async function updateUI() {
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    // 2. Update HUD
+    // 2. Update HUD (Power in top half, Distance & Time in bottom half - Centered)
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        const centerX = 152; // For centered text
-        const leftX = 15;    // A bit of padding off the pure left edge
+        // 152 is exactly half of the 304 pixel wide display
+        const startX = 152;
         
-        // Top Half Display (Power value) - Centered (rot = 0x04)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(centerX, 226, `${currentPower} W`, 0x04, 0x0F, 0x04));
+        // Top Half Display (Power value + units)
+        // Using fontId 0x04 (Font 4 - 75px spacing) to keep it nice and large
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
         
-        // Bottom Half Display (Distance | Time) 
-        // Font 1 (0x01), Left-Aligned (rot = 0x03), anchored to leftX (15)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(leftX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0x0F, 0x03));
+        // Bottom Half Display (Distance value + units + moving time)
+        // Set fontId to 0x01 (Font 1) to shrink text and prevent clipping!
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
