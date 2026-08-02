@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.11 (Bottom Font Fix)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.12 (Gauges & Colors Added)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -114,6 +114,46 @@ function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot
     return cmd;
 }
 
+// Define a new gauge in the Engo glasses memory
+function createActiveLookGaugeSaveCmd(gaugeId, x, y, outerR, innerR, startPos, endPos, isClockwise) {
+    let cmd = new Uint8Array(17);
+    cmd[0] = 0xFF; 
+    cmd[1] = 0x71; // Command ID: gaugeSave
+    cmd[2] = 0x00; 
+    cmd[3] = 0x11; // Total command length: 17 bytes
+    
+    cmd[4] = gaugeId & 0xFF;
+    cmd[5] = (x >> 8) & 0xFF;
+    cmd[6] = x & 0xFF;
+    cmd[7] = (y >> 8) & 0xFF;
+    cmd[8] = y & 0xFF;
+    cmd[9] = (outerR >> 8) & 0xFF;
+    cmd[10] = outerR & 0xFF;
+    cmd[11] = (innerR >> 8) & 0xFF;
+    cmd[12] = innerR & 0xFF;
+    cmd[13] = startPos & 0xFF; // 0-15 (Circle is split into 16 portions)
+    cmd[14] = endPos & 0xFF; 
+    cmd[15] = isClockwise ? 0x01 : 0x00;
+    
+    cmd[16] = 0xAA; // Footer
+    return cmd;
+}
+
+// Update the gauge fill percentage
+function createActiveLookGaugeDisplayCmd(gaugeId, valuePercent) {
+    let cmd = new Uint8Array(7);
+    cmd[0] = 0xFF;
+    cmd[1] = 0x70; // Command ID: gaugeDisplay
+    cmd[2] = 0x00; 
+    cmd[3] = 0x07; // Total command length: 7 bytes
+    
+    cmd[4] = gaugeId & 0xFF;
+    cmd[5] = valuePercent & 0xFF; // Fill 0-100%
+    cmd[6] = 0xAA;
+    
+    return cmd;
+}
+
 function updateStatus(msg) {
     const statusElement = document.getElementById('status');
     if (statusElement) statusElement.innerText = msg;
@@ -149,6 +189,19 @@ async function connectEngoGlasses() {
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
+        
+        // Initialize a half-circle gauge at the top center of the screen
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookGaugeSaveCmd(
+            0x01, // Gauge ID 1
+            152,  // X coordinate (Center)
+            200,  // Y coordinate
+            40,   // Outer Radius
+            30,   // Inner Radius (Makes it a 10px thick ring)
+            0,    // Start at 0 (Right)
+            8,    // End at 8 (Left) - Creating a half circle
+            true  // Clockwise draw
+        ));
+        await delay(50);
         
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
         await delay(50);
@@ -275,23 +328,37 @@ async function updateUI() {
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
 
-    // 2. Update HUD (Power in top half, Distance & Time in bottom half - Centered)
+    // 2. Update HUD (Power, Distance & Time)
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     try {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // 152 is exactly half of the 304 pixel wide display
         const startX = 152;
         
-        // Top Half Display (Power value + units)
-        // Using fontId 0x04 (Font 4 - 75px spacing) to keep it nice and large
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
+        // ---- COLOR & GAUGE LOGIC ---- //
+        let targetPower = 300; // Define your target power here
+        let pwrColor = 0x0F;   // Default White/Max
+        let pwrPercent = Math.min(Math.round((currentPower / targetPower) * 100), 100);
         
-        // Bottom Half Display (Distance value + units + moving time)
-        // Set fontId to 0x01 (Font 1) to shrink text and prevent clipping!
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
+        // Swap colors based on intensity (Hex codes map to ActiveLook palettes/luma)
+        if (currentPower > targetPower * 1.1) {
+            pwrColor = 0x02; // Red/Hot zone
+        } else if (currentPower >= targetPower * 0.9) {
+            pwrColor = 0x06; // Green/Target zone
+        } else {
+            pwrColor = 0x0A; // Blue/Cold zone
+        }
+
+        // Draw the Power Text WITH the dynamic color
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04, pwrColor));
+        
+        // Fill the Gauge WITH the calculated percentage
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookGaugeDisplayCmd(0x01, pwrPercent));
+        
+        // Draw the Bottom Text (Distance & Time) - using standard white (0x0F)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01, 0x0F));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
