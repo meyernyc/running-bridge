@@ -21,7 +21,7 @@
     </style>
 </head>
 <body>
-    <h2>Run HUD Setup <span class="version">v2.12 (Time Overflow Fix)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.13 (Time Overflow Fix)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -282,15 +282,13 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         
-        // 152 is exactly half of the 304 pixel wide display.
-        const startX = 152;
-        
         // Top Half Display (Power value + units)
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `${currentPower} W`, 0x04));
+        // Kept at 152 for true center
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(152, 226, `${currentPower} W`, 0x04));
         
         // Bottom Half Display (Distance value + units + moving time)
-        // Adjusted the startX position to 135 to leave enough room on the right for strings expanding past 4 characters in time.
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(135, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
+        // Adjusted the startX position to 170 (moving it in the opposite direction)
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(170, 136, `${currentDistance} mi | ${currentMovingTimeStr}`, 0x01));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
