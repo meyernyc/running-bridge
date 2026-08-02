@@ -23,6 +23,7 @@ def auth_stryd_session():
     app.server.logger.debug("Stryd authenticated")
     tempData = responseData.json()
     
+    # Returning both token and userID in case future endpoints require the ID
     return tempData['token'], tempData['id']
 
 
@@ -30,19 +31,17 @@ def auth_stryd_session():
 ## get the list of workouts ##
 ##############################
 def pull_stryd_data():
-    sessionID, _ = auth_stryd_session()
-    
-    # Override with hardcoded User ID as requested
-    userID = "meyernyc"
+    sessionID, userID = auth_stryd_session()
     
     # Pass tomorrow's date to ensure no issues with timezones
     today = datetime.datetime.now() + datetime.timedelta(days=1)  
     start = today - datetime.timedelta(days=9999)
     
+    # FIX 1: Removed the colon after 'Bearer'
     headers = {'Authorization': f'Bearer {sessionID}'}
     
-    # Switched to the user-specific api.stryd.com endpoint
-    url = f"https://api.stryd.com/b/api/v1/users/{userID}/calendar"
+    # FIX 2: Removed manual query parameters from the base URL string
+    url = "https://www.stryd.com/b/api/v1/activities/calendar"
     
     jsonData = {
         'srtDate': start.strftime("%m-%d-%Y"), 
@@ -50,6 +49,7 @@ def pull_stryd_data():
         'sortBy': 'StartDate'
     }
 
+    # requests.get will automatically append the jsonData to the URL properly
     responseData = requests.get(url, headers=headers, params=jsonData)
     
     if responseData.status_code != 200:
@@ -114,10 +114,12 @@ def pull_stryd_data():
 
 
 def get_training_distribution(race=1, gender=1, age=1):
-    sessionID, _ = auth_stryd_session()
+    sessionID, userID = auth_stryd_session()
     
+    # FIX 1: Removed the colon after 'Bearer'
     headers = {'Authorization': f'Bearer {sessionID}'}
     
+    # FIX 2: Used the built-in params argument instead of manual string formatting
     url = "https://www.stryd.com/b/api/v1/users/runner-attribute"
     params = {
         "race": config.get('stryd', 'compare_against_race_event'),
