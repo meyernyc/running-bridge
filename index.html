@@ -6,21 +6,25 @@
     <title>Stryd to Engo 3 HUD Bridge</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
-        .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; }
-        .metric { text-align: left; }
+        .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; flex-wrap: wrap; }
+        .metric { text-align: left; margin-bottom: 10px; min-width: 80px; }
         .metric-value { font-size: 24px; font-weight: bold; color: #4caf50; }
         #view-pwr { font-size: 36px; } 
         .metric-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
         .metric-subtext { font-size: 10px; color: #777; margin-top: 4px; }
         
         .config-panel { margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 10px; }
-        .config-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; justify-content: space-between; }
-        .config-row label { font-size: 13px; color: #ccc; flex: 1; }
-        .config-row input { width: 70px; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 5px; border-radius: 4px; text-align: center; }
+        .config-row { display: flex; gap: 5px; margin-bottom: 8px; align-items: center; justify-content: flex-start; }
+        .config-row label { font-size: 13px; color: #ccc; min-width: 45px; }
+        .config-row input { width: 55px; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 5px; border-radius: 4px; text-align: center; }
         
-        button { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
-        button:active { background-color: #1976D2; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-small { padding: 6px 10px; font-size: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .add-btn { background-color: #4caf50; color: white; margin-top: 5px; }
+        .remove-btn { background-color: #f44336; color: white; margin-left: 5px; }
+        
+        button.main-btn { background-color: #2196F3; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        button.main-btn:active { background-color: #1976D2; }
+        button.main-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
         .version { font-size: 14px; color: #888; font-weight: normal; margin-left: 10px; }
@@ -28,22 +32,31 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v2.30 (Time Gauge Edition)</span> 🌟</h2>
+    <h2>Engo 3 Setup <span class="version">v3.0 (Workout Plan Edition)</span> 🌟</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
-        <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
+        <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
+        <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
     </div>
     
     <div class="config-panel">
-        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Target Configuration 🎯</h3>
-        <div class="config-row">
-            <label>Target Power Range (Green inside, Bright Red outside):</label>
-            <input type="number" id="pwr-min" value="200"> to <input type="number" id="pwr-max" value="250">
+        <h3 style="margin-top:0; font-size:15px; color:#4caf50;">Workout Plan 🎯</h3>
+        <div id="workout-rows">
+            <div class="config-row workout-row">
+                <label class="step-label">Step 1:</label>
+                <input type="number" class="w-min" value="200" title="Min Power"> to 
+                <input type="number" class="w-max" value="250" title="Max Power"> W, 
+                <input type="number" class="w-time" value="10" title="Minutes"> min
+                <button class="btn-small remove-btn" onclick="removeRow(this)" style="visibility:hidden;">X</button>
+            </div>
+            <div class="config-row workout-row">
+                <label class="step-label">Step 2:</label>
+                <input type="number" class="w-min" value="260" title="Min Power"> to 
+                <input type="number" class="w-max" value="300" title="Max Power"> W, 
+                <input type="number" class="w-time" value="5" title="Minutes"> min
+                <button class="btn-small remove-btn" onclick="removeRow(this)">X</button>
+            </div>
         </div>
-        <div class="config-row">
-            <label>Target Duration (Minutes):</label>
-            <input type="number" id="target-time-min" value="30" min="1">
-        </div>
+        <button class="btn-small add-btn" onclick="addWorkoutRow()">+ Add Step</button>
     </div>
     
     <div id="status">Waiting to start...</div>
@@ -52,6 +65,7 @@
             <div id="view-pwr" class="metric-value">-- W</div>
             <div class="metric-label">Power</div>
             <div id="view-pwr-range" class="metric-subtext">200 - 250 W</div>
+            <div id="view-next" class="metric-subtext" style="color: #ff9800; font-weight: bold;">Next: --</div>
         </div>
         <div class="metric">
             <div id="view-pce" class="metric-value">--:--</div>
@@ -103,7 +117,7 @@ let cfgVersion = 1;
 const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]); 
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
-const CMD_SET_GAUGE_COLOR = new Uint8Array([0xFF, 0x3D, 0x00, 0x05, 0x01, 0xAA]); // Sets global shape color to 0x01
+const CMD_SET_GAUGE_COLOR = new Uint8Array([0xFF, 0x3D, 0x00, 0x05, 0x01, 0xAA]); 
 
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x04;
@@ -113,9 +127,7 @@ const CONTROL_ERROR_MESSAGES = {
     0x01: "Flow: client can send data",
     0x02: "Flow: buffer at 75%, pause sending",
     0x03: "Error: message incomplete/corrupt, command ignored",
-    0x04: "Error: receive message queue overflow",
-    0x05: "Error: reserved",
-    0x06: "Error: missing cfgWrite before configuration modification"
+    0x04: "Error: receive message queue overflow"
 };
 
 function formatTime(ms) {
@@ -123,110 +135,118 @@ function formatTime(ms) {
     let h = Math.floor(totalSec / 3600);
     let m = Math.floor((totalSec % 3600) / 60);
     let s = totalSec % 60;
-    if (h > 0) {
-        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// Workout Plan Row Management
+function updateRowLabels() {
+    const rows = document.querySelectorAll('.workout-row');
+    rows.forEach((row, index) => {
+        row.querySelector('.step-label').innerText = `Step ${index + 1}:`;
+        let btn = row.querySelector('.remove-btn');
+        if(index === 0 && rows.length === 1) {
+            btn.style.visibility = 'hidden';
+        } else {
+            btn.style.visibility = 'visible';
+        }
+    });
+}
+
+function addWorkoutRow() {
+    const container = document.getElementById('workout-rows');
+    const row = document.createElement('div');
+    row.className = 'config-row workout-row';
+    row.innerHTML = `
+        <label class="step-label">Step X:</label>
+        <input type="number" class="w-min" value="200"> to 
+        <input type="number" class="w-max" value="250"> W, 
+        <input type="number" class="w-time" value="5"> min
+        <button class="btn-small remove-btn" onclick="removeRow(this)">X</button>
+    `;
+    container.appendChild(row);
+    updateRowLabels();
+}
+
+function removeRow(btn) {
+    btn.parentElement.remove();
+    updateRowLabels();
+}
+
+function getCurrentStepInfo() {
+    let rows = document.querySelectorAll('.workout-row');
+    let elapsed = movingTimeMilli;
+    let current = { min: 0, max: 0, duration: 0, remaining: 0, nextText: "Done" };
+
+    for (let i = 0; i < rows.length; i++) {
+        let rMin = parseInt(rows[i].querySelector('.w-min').value) || 0;
+        let rMax = parseInt(rows[i].querySelector('.w-max').value) || 0;
+        let rTime = (parseFloat(rows[i].querySelector('.w-time').value) || 0) * 60 * 1000;
+
+        if (elapsed < rTime) {
+            current.min = rMin;
+            current.max = rMax;
+            current.duration = rTime;
+            current.remaining = rTime - elapsed;
+            
+            if (i + 1 < rows.length) {
+                let nMin = parseInt(rows[i+1].querySelector('.w-min').value) || 0;
+                let nMax = parseInt(rows[i+1].querySelector('.w-max').value) || 0;
+                let nTime = parseFloat(rows[i+1].querySelector('.w-time').value) || 0;
+                current.nextText = `${nMin}-${nMax}W @ ${nTime}m`;
+            }
+            return current;
+        } else {
+            elapsed -= rTime; // deduct this step's time, move to checking next step
+        }
+    }
+
+    // Workout Complete fallback to last row settings
+    let lastRow = rows[rows.length - 1];
+    if (lastRow) {
+        current.min = parseInt(lastRow.querySelector('.w-min').value) || 0;
+        current.max = parseInt(lastRow.querySelector('.w-max').value) || 0;
+    }
+    current.duration = 1;
+    current.remaining = 0;
+    return current;
 }
 
 function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let safeLength = Math.min(textBytes.length, textLength);
     let totalLen = 13 + safeLength; 
-    
     let cmd = new Uint8Array(totalLen);
-    
-    cmd[0] = 0xFF;              
-    cmd[1] = 0x3E;              
-    cmd[2] = 0x00;              
-    cmd[3] = totalLen & 0xFF;   
-    
-    cmd[4] = (x >> 8) & 0xFF;   
-    cmd[5] = x & 0xFF;          
-    cmd[6] = (y >> 8) & 0xFF;   
-    cmd[7] = y & 0xFF;          
-    
-    cmd[8] = rot & 0xFF;        
-    cmd[9] = fontId & 0xFF;     
-    cmd[10] = colorVal & 0xFF;  
-    
+    cmd[0] = 0xFF; cmd[1] = 0x3E; cmd[2] = 0x00; cmd[3] = totalLen & 0xFF;
+    cmd[4] = (x >> 8) & 0xFF; cmd[5] = x & 0xFF; cmd[6] = (y >> 8) & 0xFF; cmd[7] = y & 0xFF;
+    cmd[8] = rot & 0xFF; cmd[9] = fontId & 0xFF; cmd[10] = colorVal & 0xFF;
     cmd.set(textBytes.slice(0, safeLength), 11);
-    
-    cmd[totalLen - 2] = 0x00;   
-    cmd[totalLen - 1] = 0xAA;   
-    
+    cmd[totalLen - 2] = 0x00; cmd[totalLen - 1] = 0xAA; 
     return cmd;
 }
 
 function createCfgWriteCmd(name, version, password) {
     let nameBytes = new TextEncoder().encode(name).slice(0, 11);
-    let nameFieldLen = nameBytes.length + 1;
-    let dataLen = nameFieldLen + 4 + 4;
-    let totalLen = 4 + dataLen + 1;
-
+    let totalLen = 4 + (nameBytes.length + 1) + 8 + 1;
     let cmd = new Uint8Array(totalLen);
-    cmd[0] = 0xFF;
-    cmd[1] = 0xD0; 
-    cmd[2] = 0x00; 
-    cmd[3] = totalLen & 0xFF;
-
+    cmd[0] = 0xFF; cmd[1] = 0xD0; cmd[2] = 0x00; cmd[3] = totalLen & 0xFF;
     let offset = 4;
-    cmd.set(nameBytes, offset);
-    offset += nameBytes.length;
-    cmd[offset] = 0x00; 
-    offset += 1;
-
-    cmd[offset]     = (version >>> 24) & 0xFF;
-    cmd[offset + 1] = (version >>> 16) & 0xFF;
-    cmd[offset + 2] = (version >>> 8) & 0xFF;
-    cmd[offset + 3] = version & 0xFF;
-    offset += 4;
-
-    cmd[offset]     = (password >>> 24) & 0xFF;
-    cmd[offset + 1] = (password >>> 16) & 0xFF;
-    cmd[offset + 2] = (password >>> 8) & 0xFF;
-    cmd[offset + 3] = password & 0xFF;
-    offset += 4;
-
+    cmd.set(nameBytes, offset); offset += nameBytes.length; cmd[offset] = 0x00; offset += 1;
+    cmd[offset] = (version >>> 24) & 0xFF; cmd[offset + 1] = (version >>> 16) & 0xFF; cmd[offset + 2] = (version >>> 8) & 0xFF; cmd[offset + 3] = version & 0xFF; offset += 4;
+    cmd[offset] = (password >>> 24) & 0xFF; cmd[offset + 1] = (password >>> 16) & 0xFF; cmd[offset + 2] = (password >>> 8) & 0xFF; cmd[offset + 3] = password & 0xFF; offset += 4;
     cmd[offset] = 0xAA;
     return cmd;
 }
 
 function createGaugeSaveCmd() {
     let cmd = new Uint8Array(17);
-    cmd[0] = 0xFF;
-    cmd[1] = 0x71; 
-    cmd[2] = 0x00;
-    cmd[3] = 0x11; 
-    
-    cmd[4] = 0x01; 
-    
-    cmd[5] = 0x00; cmd[6] = 0x97; // x = 151
-    cmd[7] = 0x00; cmd[8] = 0x7F; // y = 127
-    cmd[9] = 0x00; cmd[10] = 0x6E; // rExt = 110
-    cmd[11] = 0x00; cmd[12] = 0x5D; // rIn = 93 (Reduced width by 50%)
-    
-    cmd[13] = 0x03; 
-    cmd[14] = 0x0E; 
-    cmd[15] = 0x01; 
-    
-    cmd[16] = 0xAA; 
+    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x5D, 0x03, 0x0E, 0x01, 0xAA], 0);
     return cmd;
 }
 
 function createGaugeDisplayCmd(gaugeId, percent) {
     let clampedPercent = Math.min(Math.max(Math.round(percent), 0), 100);
-    let cmd = new Uint8Array(7);
-    cmd[0] = 0xFF;
-    cmd[1] = 0x70; 
-    cmd[2] = 0x00;
-    cmd[3] = 0x07; 
-    
-    cmd[4] = gaugeId & 0xFF;
-    cmd[5] = clampedPercent & 0xFF;
-    
-    cmd[6] = 0xAA; 
-    return cmd;
+    return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
 function updateStatus(msg) {
@@ -249,11 +269,7 @@ function handleControlNotification(event) {
     if (dataView.byteLength === 0) return;
     let value = dataView.getUint8(0);
     let msg = CONTROL_ERROR_MESSAGES[value] || `Unknown control value: 0x${value.toString(16)}`;
-    if (value >= 0x03) {
-        debugLog(`[CONTROL ERROR] ${msg}`);
-    } else {
-        debugLog(`[CONTROL] ${msg}`);
-    }
+    if (value >= 0x03) debugLog(`[CONTROL ERROR] ${msg}`);
 }
 
 async function connectEngoGlasses() {
@@ -279,21 +295,12 @@ async function connectEngoGlasses() {
             engoControlCharacteristic = await engoService.getCharacteristic(ENGO_CONTROL_UUID);
             await engoControlCharacteristic.startNotifications();
             engoControlCharacteristic.addEventListener('characteristicvaluechanged', handleControlNotification);
-            debugLog("Control channel subscribed.");
-        } catch (ctrlError) {
-            debugLog("Warning: could not subscribe to Control channel: " + ctrlError.message);
-        }
+        } catch (ctrlError) {}
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
-        
-        debugLog("Writing configuration '" + CFG_NAME + "' (cfgWrite)...");
-        await engoRxCharacteristic.writeValueWithResponse(
-            createCfgWriteCmd(CFG_NAME, cfgVersion, CFG_PASSWORD)
-        );
+        await engoRxCharacteristic.writeValueWithResponse(createCfgWriteCmd(CFG_NAME, cfgVersion, CFG_PASSWORD));
         await delay(200);
-
-        debugLog("Uploading Gauge configuration (gaugeSave)...");
         await engoRxCharacteristic.writeValueWithResponse(createGaugeSaveCmd());
         await delay(100);
         isGaugeInitialized = true;
@@ -301,12 +308,10 @@ async function connectEngoGlasses() {
         const linkedText = "LINKED";
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, linkedText, linkedText.length, 0x02, 0xFF));
         await delay(50);
-        
         const waitingText = "Waiting for Stryd...";
         await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, waitingText, waitingText.length, 0x02, 0xFF));
         
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
-        
         const strydBtn = document.getElementById('btn-stryd');
         strydBtn.disabled = false;
         strydBtn.style.backgroundColor = '#2196F3'; 
@@ -315,13 +320,9 @@ async function connectEngoGlasses() {
     }
 }
 
-function getPowerColor(power) {
+function getPowerColor(power, min, max) {
     if (power <= 0 || isNaN(power)) return COLOR_DEFAULT_WHITE;
-
-    let pwrMin = parseInt(document.getElementById('pwr-min').value) || 200;
-    let pwrMax = parseInt(document.getElementById('pwr-max').value) || 250;
-
-    if (power >= pwrMin && power <= pwrMax) {
+    if (power >= min && power <= max) {
         return COLOR_GREEN;        
     } else {
         return COLOR_BRIGHT_RED;  
@@ -336,11 +337,8 @@ async function connectStrydPod() {
             optionalServices: [ RSC_SERVICE_UUID, '00001814-0000-1000-8000-00805f9b34fb', CP_SERVICE_UUID ]
         });
         
-        strydDevice.addEventListener('gattserverdisconnected', () => {
-            updateStatus("Stryd Disconnected.");
-        });
+        strydDevice.addEventListener('gattserverdisconnected', () => { updateStatus("Stryd Disconnected."); });
         
-        updateStatus("Connecting to Stryd GATT server...");
         const strydServer = await strydDevice.gatt.connect();
         await delay(1000);
         
@@ -348,17 +346,13 @@ async function connectStrydPod() {
         strydServiceChar = await rscService.getCharacteristic(RSC_CHAR_UUID);
         await strydServiceChar.startNotifications();
         strydServiceChar.addEventListener('characteristicvaluechanged', processIncomingRSC);
-        debugLog("RSC Service Bound.");
-
+        
         try {
             let cpService = await strydServer.getPrimaryService(CP_SERVICE_UUID);
             strydPowerChar = await cpService.getCharacteristic(CP_CHAR_UUID);
             await strydPowerChar.startNotifications();
             strydPowerChar.addEventListener('characteristicvaluechanged', processIncomingCP);
-            debugLog("Cycling Power Service Bound.");
-        } catch (cpError) {
-            debugLog("Warning: Cycling Power binding failed. Relying on RSC appended power.");
-        }
+        } catch (cpError) {}
         
         updateStatus("Bridge active! Dual GATT streams linked.");
     } catch (error) {
@@ -375,9 +369,6 @@ function processIncomingRSC(event) {
 
     let dataView = event.target.value;
     let flags = dataView.getUint8(0);
-    let strideLengthPresent = flags & 0x01;
-    let totalDistancePresent = flags & 0x02;
-    
     let byteOffset = 1;
     let rawSpeed = dataView.getUint16(byteOffset, true);
     byteOffset += 2;
@@ -398,25 +389,18 @@ function processIncomingRSC(event) {
     currentMovingTimeStr = formatTime(movingTimeMilli);
     
     byteOffset += 1;
-    if (strideLengthPresent) byteOffset += 2;
+    if (flags & 0x01) byteOffset += 2;
     
-    if (totalDistancePresent) {
+    if (flags & 0x02) {
         let totalMeters = dataView.getUint32(byteOffset, true) / 10;
         currentDistance = (totalMeters * 0.000621371).toFixed(2);
         byteOffset += 4;
     }
     
-    let pwrRSC = 0;
     if (byteOffset + 1 < dataView.byteLength) {
-        pwrRSC = dataView.getUint16(byteOffset, true);
+        let pwrRSC = dataView.getUint16(byteOffset, true);
+        if (pwrRSC >= 0 && speedMps > 0.447) currentPower = pwrRSC;
     }
-    
-    if (pwrRSC >= 0 && speedMps > 0.447) {
-        currentPower = pwrRSC;
-    } else {
-        currentPower = 0;
-    }
-    
     updateUI();
 }
 
@@ -424,25 +408,22 @@ function processIncomingCP(event) {
     let dataView = event.target.value;
     if (dataView.byteLength >= 4) {
         let pwrCP = dataView.getInt16(2, true);
-        if (pwrCP >= 0) {
-            currentPower = pwrCP;
-        } else {
-            currentPower = 0;
-        }
+        if (pwrCP >= 0) currentPower = pwrCP;
     }
     updateUI();
 }
 
 async function updateUI() {
-    let pwrMin = document.getElementById('pwr-min').value || "200";
-    let pwrMax = document.getElementById('pwr-max').value || "250";
-    let rangeText = `${pwrMin} - ${pwrMax} W`;
+    let stepInfo = getCurrentStepInfo();
+    let rangeText = `${stepInfo.min} - ${stepInfo.max} W`;
+    let nextText = `Next: ${stepInfo.nextText}`;
 
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
     document.getElementById('view-pwr-range').innerText = rangeText;
+    document.getElementById('view-next').innerText = nextText;
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
@@ -451,36 +432,27 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_CLEAR);
         
-        let powerColor = getPowerColor(currentPower);
+        let powerColor = getPowerColor(currentPower, stepInfo.min, stepInfo.max);
         
         if (isGaugeInitialized) {
-            // Target time countdown gauge calculation (Starts full at 100%, decreases to 0%)
-            let targetMinutes = parseFloat(document.getElementById('target-time-min').value) || 30;
-            let targetMilli = targetMinutes * 60 * 1000;
-            let remainingMilli = Math.max(0, targetMilli - movingTimeMilli);
-            let percent = targetMilli > 0 ? (remainingMilli / targetMilli) * 100 : 0;
-            
-            // Set the drawing color to 0x01 BEFORE drawing the gauge
+            let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
             await engoRxCharacteristic.writeValueWithoutResponse(CMD_SET_GAUGE_COLOR);
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // Main Power text value in center
+        // Power Value (Center)
         const powerText = `${currentPower} W`;
-        const powerTextLength = powerText.length;
-        const payloadPower = createActiveLookColorTextCmd(210, 160, powerText, powerTextLength, 0x03, powerColor);
-        await engoRxCharacteristic.writeValueWithoutResponse(payloadPower);
+        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(220, 180, powerText, powerText.length, 0x03, powerColor));
         
-        // Power range text displayed underneath the power number
-        const rangeTextLen = rangeText.length;
-        const payloadRange = createActiveLookColorTextCmd(210, 115, rangeText, rangeTextLen, 0x01, 0x3C);
-        await engoRxCharacteristic.writeValueWithoutResponse(payloadRange);
+        // Current Step Target Range
+        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(210, 135, rangeText, rangeText.length, 0x01, 0x3C));
         
-        // Distance & Time secondary line
+        // Next Step Information line
+        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(205, 95, nextText, nextText.length, 0x01, 0x39)); // 0x39 for slight orange/yellow hue
+        
+        // Time & Distance Secondary line
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        const secTextLen = secText.length;
-        const payloadSec = createActiveLookColorTextCmd(200, 50, secText, secTextLen, 0x01, 0x3C);
-        await engoRxCharacteristic.writeValueWithoutResponse(payloadSec);
+        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(200, 50, secText, secText.length, 0x01, 0x3C));
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
