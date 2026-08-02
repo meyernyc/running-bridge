@@ -16,13 +16,13 @@
         #status { margin-top: 20px; padding: 15px; border-left: 4px solid #FF9800; background: #2a2a2a; font-family: monospace; font-size: 14px; }
         .version { font-size: 14px; color: #888; font-weight: normal; margin-left: 10px; }
         
-        /* Added for debugging GATT payloads directly on phone */
+        /* Debugging GATT payloads directly on phone */
         .debug-panel { margin-top: 20px; padding: 15px; background: #000; border: 1px solid #333; font-family: monospace; font-size: 11px; color: #00ff00; border-radius: 5px; height: 100px; overflow-y: auto; }
     </style>
 </head>
 <body>
 
-    <h2>Run HUD Setup <span class="version">v2.9 (GATT Diagnostics)</span></h2>
+    <h2>Run HUD Setup <span class="version">v2.11 (Max Size Font)</span></h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -71,7 +71,8 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
-function createActiveLookTextCmd(x, y, text, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
+// Default fontId set to 0x04 (Max size font)
+function createActiveLookTextCmd(x, y, text, fontId = 0x04, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let totalLen = 13 + textBytes.length; 
     let cmd = new Uint8Array(totalLen);
@@ -133,9 +134,9 @@ async function connectEngoGlasses() {
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 226, "LINKED"));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(250, 200, "LINKED", 0x03));
         await delay(50);
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(294, 181, "Waiting for Stryd..."));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(250, 120, "Waiting...", 0x03));
         
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
         const strydBtn = document.getElementById('btn-stryd');
@@ -186,9 +187,6 @@ async function connectStrydPod() {
     }
 }
 
-/**
- * Handle incoming Pace & Distance telemetry (And check for appended legacy power)
- */
 function processIncomingRSC(event) {
     let dataView = event.target.value;
     let flags = dataView.getUint8(0);
@@ -219,7 +217,6 @@ function processIncomingRSC(event) {
         byteOffset += 4;
     }
     
-    // Check if Stryd appended power to the end of the RSC packet (Legacy firmware behavior)
     let pwrRSC = 0;
     if (byteOffset + 1 < dataView.byteLength) {
         pwrRSC = dataView.getUint16(byteOffset, true);
@@ -235,13 +232,9 @@ function processIncomingRSC(event) {
     updateUI();
 }
 
-/**
- * Handle incoming Power telemetry independently from Cycling Power Service
- */
 function processIncomingCP(event) {
     let dataView = event.target.value;
     
-    // Cycling Power Profile puts Power as a 16-bit integer at byte 2
     if (dataView.byteLength >= 4) {
         let pwrCP = dataView.getInt16(2, true);
         
@@ -249,16 +242,13 @@ function processIncomingCP(event) {
             currentPower = pwrCP;
             debugLog(`[CP stream] Power decoded: ${currentPower}W`);
         } else {
-            debugLog(`[CP stream] Zero watts received. (Try heavy foot strikes)`);
+            debugLog(`[CP stream] Zero watts received.`);
         }
     }
     
     updateUI();
 }
 
-/**
- * Pushes UI state via Graphics Engine Hold/Flush buffer
- */
 async function updateUI() {
     // 1. Update web dash
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
@@ -273,10 +263,12 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_ON);
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
 
-        const startX = 294;
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 226, `PWR: ${currentPower} W`));
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 181, `PCE: ${currentPace}`));
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(startX, 136, `DST: ${currentDistance} mi`));
+        // Maximize size by using Font ID 0x04, removing text prefixes, 
+        // and vertically spacing across the full 256px display (Y=210, Y=130, Y=50).
+        const posX = 260; // Right-aligned/centered visual focus
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(posX, 210, `${currentPower}W`, 0x04));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(posX, 130, `${currentPace}`, 0x04));
+        await engoRxCharacteristic.writeValueWithResponse(createActiveLookTextCmd(posX, 50, `${currentDistance}m`, 0x04));
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
