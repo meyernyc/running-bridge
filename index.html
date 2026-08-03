@@ -442,7 +442,7 @@ async function updateUI() {
 
         // 1. Power Value (Custom 70px Font 0x04)
         const powerText = `${currentPower}`;
-        let cmdPower = createActiveLookColorTextCmd(200, 160, powerText, powerText.length, 0x04, powerColor);
+        let cmdPower = createActiveLookColorTextCmd(200, 200, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         // 2. Pace Value (New: above power, y=130, font 0x05, thick effect)
@@ -457,7 +457,7 @@ async function updateUI() {
         
         // 5. Time & Distance Secondary line (y=45, medium font 0x02, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x02, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, COLOR_GREEN);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
