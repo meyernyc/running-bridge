@@ -474,10 +474,10 @@ async function updateUI() {
 
         // 1. Power Value (Center, y=180, large font 0x03)
         const powerText = `${currentPower} w`;
-        await sendThickText(engoRxCharacteristic, 220, 170, powerText, 0x03, powerColor);
+        await sendThickText(engoRxCharacteristic, 220, 160, powerText, 0x04, powerColor);
         
         // 2. Current Step Target Range (y=135, medium font 0x01)
-        await sendThickText(engoRxCharacteristic, 210, 125, rangeText, 0x01, 0x3C);
+        await sendThickText(engoRxCharacteristic, 210, 115, rangeText, 0x01, 0x3C);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=95)
         await sendThickText(engoRxCharacteristic, 220, 65, nextText, 0x01, 0x39);
