@@ -333,10 +333,12 @@ async function connectEngoGlasses() {
         await delay(100);
         isGaugeInitialized = true;
 
-        const linkedText = "Start Running...";
-        await sendThickText(engoRxCharacteristic, 190, 120, linkedText, 0x04, 0xFF, true);
-        await delay(50);
-        
+        const linkedText = "LINKED";
+        await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
+//        await delay(50);
+        const waitingText = "Waiting for Stryd...";
+        await sendThickText(engoRxCharacteristic, 294, 181, waitingText, 0x02, 0xFF, true);
+
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
         document.getElementById('btn-engo').style.backgroundColor = '#555';
         document.getElementById('btn-stryd').disabled = false;
