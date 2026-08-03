@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stryd to Engo 3 HUD Bridge (60px Font)</title>
+    <title>Stryd to Engo 3 HUD Bridge (70px Font)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
         .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; flex-wrap: wrap; }
@@ -32,10 +32,10 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v4.0 (60px Native Font)</span> 🚀</h2>
+    <h2>Engo 3 Setup <span class="version">v5.0 (70px Native Font)</span> 🚀</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
-        <button id="btn-font" class="main-btn" onclick="installCustomFont()" disabled style="background-color: #9C27B0;">2. Install 60px Font</button>
+        <button id="btn-font" class="main-btn" onclick="installCustomFont()" disabled style="background-color: #9C27B0;">2. Install 70px Font</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>3. Connect Stryd</button>
     </div>
     
@@ -303,8 +303,8 @@ function generateCustomNumberFont() {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
-    // Upgraded to massive 60px size
-    const fontSize = 60; 
+    // Upgraded to massive 70px size
+    const fontSize = 70; 
     
     const definedChars = [' ', '0','1','2','3','4','5','6','7','8','9','w'];
     const firstChar = 32; 
@@ -316,7 +316,7 @@ function generateCustomNumberFont() {
 
     for (let char of definedChars) {
         let width = Math.max(1, Math.ceil(ctx.measureText(char).width));
-        if (char === ' ') width = 18; // Spacing adjustment for 60px
+        if (char === ' ') width = 22; // Spacing adjustment for 70px
 
         canvas.width = width;
         canvas.height = fontSize;
@@ -360,7 +360,7 @@ function generateCustomNumberFont() {
 async function installCustomFont() {
     if (!engoRxCharacteristic) return;
     document.getElementById('btn-font').disabled = true;
-    updateStatus("Compiling 60px Bold Font...");
+    updateStatus("Compiling 70px Bold Font...");
     
     let fontPayload = generateCustomNumberFont();
     let size = fontPayload.length;
@@ -387,7 +387,7 @@ async function installCustomFont() {
             updateStatus(`Flashing Font to Glasses... ${Math.round((offset/size)*100)}%`);
             await delay(40);
         }
-        updateStatus("60px Font Installed! Click 'Connect Stryd'.");
+        updateStatus("70px Font Installed! Click 'Connect Stryd'.");
         document.getElementById('btn-stryd').disabled = false;
         document.getElementById('btn-font').style.display = 'none'; // Hide when done
     } catch (e) {
@@ -444,7 +444,7 @@ async function connectEngoGlasses() {
         await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
         await delay(50);
         
-        updateStatus("Glasses connected! Click 'Install 60px Font'.");
+        updateStatus("Glasses connected! Click 'Install 70px Font'.");
         document.getElementById('btn-engo').style.backgroundColor = '#555';
         document.getElementById('btn-font').disabled = false;
         
@@ -571,16 +571,16 @@ async function updateUI() {
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // 1. Power Value (Custom 60px Font 0x04, Moved X to 160 so it fits on screen)
+        // 1. Power Value (Custom 70px Font 0x04, Moved X to 130 to accommodate wider text)
         const powerText = `${currentPower} w`;
-        let cmdPower = createActiveLookColorTextCmd(160, 160, powerText, powerText.length, 0x04, powerColor);
+        let cmdPower = createActiveLookColorTextCmd(205, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         // 2. Current Step Target Range (y=115, medium font 0x01, thick effect)
-        await sendThickText(engoRxCharacteristic, 210, 115, rangeText, 0x05, 0x3C);
+        await sendThickText(engoRxCharacteristic, 210, 105, rangeText, 0x01, COLOR_GREEN);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
-        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x04, 0x39);
+        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x01, 0x39);
         
         // 4. Time & Distance Secondary line (y=45, medium font 0x01, default color, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
