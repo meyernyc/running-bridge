@@ -584,7 +584,7 @@ async function updateUI() {
         
         // --- ADDED: Total Moving Time text, drawn 30 pixels above the pace ---
         const timeText = `${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 180, 245, timeText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 170, 245, timeText, 0x05, COLOR_GREEN);
 
         const paceText = `${currentPace} /mi`;
         await sendThickText(engoRxCharacteristic, 180, 215, paceText, 0x05, COLOR_GREEN);
