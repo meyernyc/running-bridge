@@ -254,8 +254,10 @@ function createGaugeSaveCmd() {
     cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x66, 0x0C, 0x04, 0x00, 0xAA], 0);
     return cmd;
 }
+
 function createGaugeDisplayCmd(gaugeId, percent) {
-    let clampedPercent = Math.min(Math.max(Math.round(percent), 0), 100);
+    // USING Math.ceil() INSTEAD OF Math.round() HERE TO PREVENT PREMATURE 0%
+    let clampedPercent = Math.min(Math.max(Math.ceil(percent), 0), 100);
     return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
@@ -457,8 +459,8 @@ async function updateUI() {
     let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
     
     // Determine if the workout is finished
-    let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "Done" : `nxt ${stepInfo.nextText}`;
+    let isWorkoutFinished = stepInfo.nextText === "           ----- Done -----";
+    let nextText = isWorkoutFinished ? "Done" : `next: ${stepInfo.nextText} w`;
     let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
@@ -505,7 +507,7 @@ async function updateUI() {
         await sendThickText(engoRxCharacteristic, 195, 100, rangeText, 0x05, COLOR_GREEN);
         
         // 4. Next Step Info line (y=70, small font 0x05, thick effect)
-        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x05, nextTextColor);
+        await sendThickText(engoRxCharacteristic, 250, 70, nextText, 0x05, nextTextColor);
         
         // 5. Time & Distance Secondary line (y=45, medium font 0x02, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
