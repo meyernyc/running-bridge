@@ -461,7 +461,7 @@ async function updateUI() {
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
     let nextText = isWorkoutFinished ? "        ------  Done  ------" : `next: ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
+    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_BRIGHT_RED ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
@@ -507,11 +507,11 @@ async function updateUI() {
         await sendThickText(engoRxCharacteristic, 195, 100, rangeText, 0x05, COLOR_GREEN);
         
         // 4. Next Step Info line (y=70, small font 0x05, thick effect)
-        await sendThickText(engoRxCharacteristic, 250, 70, nextText, 0x05, nextTextColor);
+        await sendThickText(engoRxCharacteristic, 260, 70, nextText, 0x05, nextTextColor);
         
         // 5. Time & Distance Secondary line (y=45, medium font 0x02, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 210, 45, secText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 220, 45, secText, 0x01, COLOR_GREEN);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
