@@ -432,7 +432,7 @@ function processIncomingCP(event) {
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
     let rangeText = `${stepInfo.min} - ${stepInfo.max} W`;
-    let nextText = `Next: ${stepInfo.nextText}`; // Formatted as "Next: 260-300W @ 5m"
+    let nextText = `Next: ${stepInfo.nextText}`; // Formatted as "nxt 260-300 5m"
 
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
@@ -464,7 +464,7 @@ async function updateUI() {
         await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(210, 135, rangeText, rangeText.length, 0x01, 0x3C));
         
         // 3. Next Step Info line (Single line, small font 0x00, y=95)
-        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(205, 95, nextText, nextText.length, 0x00, 0x39));
+        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(220, 95, nextText, nextText.length, 0x01, 0x39));
         
         // 4. Time & Distance Secondary line (y=45, medium font 0x01)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
