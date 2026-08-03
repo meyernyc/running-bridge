@@ -65,7 +65,7 @@
             <div id="view-pwr" class="metric-value">-- W</div>
             <div class="metric-label">Power</div>
             <div id="view-pwr-range" class="metric-subtext">200 - 250 W</div>
-            <div id="view-next" class="metric-subtext" style="color: #ff9800; font-weight: bold;">Next: --</div>
+            <div id="view-next" class="metric-subtext" style="color: #ff9800; font-weight: bold;">nxt --</div>
         </div>
         <div class="metric">
             <div id="view-pce" class="metric-value">--:--</div>
@@ -192,7 +192,8 @@ function getCurrentStepInfo() {
                 let nMax = parseInt(rows[i+1].querySelector('.w-max').value) || 0;
                 let nTime = parseFloat(rows[i+1].querySelector('.w-time').value) || 0;
                 
-                current.nextText = `${nMin}-${nMax}W @ ${nTime}m`;
+                // Changed from W @ Xm to w Xm
+                current.nextText = `${nMin}-${nMax}w ${nTime}m`;
             }
             return current;
         } else {
@@ -445,7 +446,9 @@ function processIncomingCP(event) {
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
     let rangeText = `${stepInfo.min} - ${stepInfo.max} W`;
-    let nextText = `Next: ${stepInfo.nextText}`; // Formatted as "nxt 260-300 5m"
+    
+    // Changed "Next: " to "nxt "
+    let nextText = stepInfo.nextText === "Done" ? "nxt Done" : `nxt ${stepInfo.nextText}`;
 
     document.getElementById('view-pwr').innerText = `${currentPower} W`;
     document.getElementById('view-pce').innerText = currentPace;
@@ -479,9 +482,9 @@ async function updateUI() {
         // 3. Next Step Info line (Single line, small font 0x00, y=95)
         await sendThickText(engoRxCharacteristic, 220, 95, nextText, 0x01, 0x39);
         
-        // 4. Time & Distance Secondary line (y=45, medium font 0x01)
+        // 4. Time & Distance Secondary line (y=45, medium font 0x01) - Changed to COLOR_DEFAULT_WHITE
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, 0x3C);
+        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, COLOR_DEFAULT_WHITE);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
