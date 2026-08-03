@@ -412,7 +412,7 @@ async function updateUI() {
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
     let nextText = isWorkoutFinished ? "Done" : `nxt ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_BRIGHT_RED;
+    let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_DEFAULT_WHITE;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
@@ -442,12 +442,12 @@ async function updateUI() {
 
         // 1. Power Value (Custom 70px Font 0x04)
         const powerText = `${currentPower}`;
-        let cmdPower = createActiveLookColorTextCmd(180, 130, powerText, powerText.length, 0x04, powerColor);
+        let cmdPower = createActiveLookColorTextCmd(180, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         // 2. Pace Value (New: above power, y=130, font 0x05, thick effect)
         const paceText = `${currentPace} /mi`;
-        await sendThickText(engoRxCharacteristic, 200, 200, paceText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 185, 195, paceText, 0x05, COLOR_GREEN);
         
         // 3. Current Step Target Range (y=100, medium font 0x05, thick effect)
         await sendThickText(engoRxCharacteristic, 210, 100, rangeText, 0x05, COLOR_GREEN);
