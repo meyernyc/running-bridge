@@ -523,7 +523,7 @@ async function updateUI() {
     
     let isWorkoutFinished = stepInfo.nextText === "Done";
     let nextText = isWorkoutFinished ? "      next - Done" : `next: ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_BRIGHT_RED ;
+    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
