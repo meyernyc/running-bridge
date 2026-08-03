@@ -623,7 +623,7 @@ async function updateUI() {
         const paceText = `${currentPace} /mi`;
         await sendThickText(engoRxCharacteristic, 180, 215, paceText, 0x05, COLOR_GREEN);
         
-        await sendThickText(engoRxCharacteristic, 230, 115, rangeText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 230, 115, rangeText, 0x05, COLOR_GREEN);
         
         // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
