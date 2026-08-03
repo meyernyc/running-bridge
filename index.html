@@ -612,13 +612,13 @@ async function updateUI() {
             );        }
 
         const powerText = `${currentPower}`;
-        let cmdPower = createActiveLookColorTextCmd(200, 170, powerText, powerText.length, 0x04, powerColor);
+        let cmdPower = createActiveLookColorTextCmd(200, 185, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         const paceText = `${currentPace} /mi`;
-        await sendThickText(engoRxCharacteristic, 180, 195, paceText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 180, 215, paceText, 0x05, COLOR_GREEN);
         
-        await sendThickText(engoRxCharacteristic, 195, 100, rangeText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 195, 115, rangeText, 0x05, COLOR_GREEN);
         
         // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
@@ -626,7 +626,7 @@ async function updateUI() {
         }
         
         const secText = `${currentDistance} mi`;
-        await sendThickText(engoRxCharacteristic, 210, 45, secText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 180, 55, secText, 0x05, COLOR_GREEN);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
