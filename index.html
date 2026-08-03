@@ -32,7 +32,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v5.0</span> 🚀</h2>
+    <h2>Engo 3 Setup <span class="version">v5.1</span> 🚀</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>2. Connect Stryd</button>
@@ -407,11 +407,11 @@ function processIncomingCP(event) {
 
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
-    let rangeText = `${stepInfo.min}-${stepInfo.max}w`;
+    let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
     
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "Done" : `next ${stepInfo.nextText}`;
+    let nextText = isWorkoutFinished ? "Done" : `nxt ${stepInfo.nextText}`;
     let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_BRIGHT_RED;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
@@ -440,20 +440,24 @@ async function updateUI() {
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // 1. Power Value (Custom 70px Font 0x04, Moved X to 130 to accommodate wider text)
+        // 1. Power Value (Custom 70px Font 0x04)
         const powerText = `${currentPower}`;
         let cmdPower = createActiveLookColorTextCmd(200, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
-        // 2. Current Step Target Range (y=115, medium font 0x01, thick effect)
-        await sendThickText(engoRxCharacteristic, 190, 100, rangeText, 0x01, COLOR_GREEN);
+        // 2. Pace Value (New: above power, y=130, font 0x05, thick effect)
+        const paceText = `${currentPace} /mi`;
+        await sendThickText(engoRxCharacteristic, 180, 130, paceText, 0x05, COLOR_GREEN);
         
-        // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
+        // 3. Current Step Target Range (y=100, medium font 0x05, thick effect)
+        await sendThickText(engoRxCharacteristic, 210, 100, rangeText, 0x05, COLOR_GREEN);
+        
+        // 4. Next Step Info line (y=70, small font 0x05, thick effect)
         await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x05, nextTextColor);
         
-        // 4. Time & Distance Secondary line (y=45, medium font 0x01, default color, thick effect)
+        // 5. Time & Distance Secondary line (y=45, medium font 0x02, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x02, COLOR_GREEN);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
