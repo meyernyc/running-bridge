@@ -102,6 +102,8 @@ let movingTimeMilli = 0;
 let lastRscTime = 0;
 let currentMovingTimeStr = "0:00";
 
+let wakeLock = null; // Wake Lock Sentinel
+
 const ENGO_SERVICE_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_RX_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba';
 const ENGO_CONTROL_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb9';
@@ -257,6 +259,31 @@ function createGaugeDisplayCmd(gaugeId, percent) {
     return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
+// ----------------- WAKE LOCK LOGIC ----------------- //
+
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => {
+                debugLog("Wake Lock Released");
+            });
+            debugLog("Wake Lock Acquired");
+        } catch (err) {
+            debugLog("Wake Lock Error: " + err.message);
+        }
+    } else {
+        debugLog("Wake Lock API not supported in this browser");
+    }
+}
+
+// Re-request wake lock when document becomes visible again
+document.addEventListener('visibilitychange', async () => {
+    if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+    }
+});
+
 // ----------------- BLUETOOTH CONNECTION LOGIC ----------------- //
 
 function updateStatus(msg) {
@@ -276,6 +303,9 @@ const delay = ms => new Promise(res => setTimeout(res, ms));
 
 async function connectEngoGlasses() {
     try {
+        // Request wake lock directly upon user interaction
+        await requestWakeLock();
+
         updateStatus("Scanning for Engo Glasses...");
         engoDevice = await navigator.bluetooth.requestDevice({
             filters: [{ namePrefix: 'ENGO' }, { namePrefix: 'engo' }, { namePrefix: 'A.LooK' }],
