@@ -250,10 +250,10 @@ function createCfgWriteCmd(name, version, password) {
 
 function createGaugeSaveCmd() {
     let cmd = new Uint8Array(17);
-    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x5D, 0x03, 0x0E, 0x01, 0xAA], 0);
+    // Bytes 11 and 12 changed to 0x00, 0x66 (inner radius = 102) to cut the thickness in half
+    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x66, 0x0C, 0x04, 0x00, 0xAA], 0);
     return cmd;
 }
-
 function createGaugeDisplayCmd(gaugeId, percent) {
     let clampedPercent = Math.min(Math.max(Math.round(percent), 0), 100);
     return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
@@ -348,6 +348,23 @@ function getPowerColor(power, min, max) {
     if (power <= 0 || isNaN(power)) return COLOR_DEFAULT_WHITE;
     if (power >= min && power <= max) return COLOR_GREEN;        
     return COLOR_BRIGHT_RED;  
+}
+
+function getGaugeTimeColor(percent) {
+    // Ensure percent stays strictly between 0 and 100
+    let clampedPercent = Math.max(0, Math.min(100, percent));
+    
+    // Convert percentage to a ratio from 0.0 to 1.0
+    let ratio = clampedPercent / 100; 
+
+    // Blend the top hex value from 0xC (12) down to 0x3 (3)
+    let topNibble = Math.round(3 + (9 * ratio));    
+    
+    // Blend the bottom hex value from 0x3 (3) up to 0xC (12)
+    let bottomNibble = Math.round(12 - (9 * ratio)); 
+    
+    // Combine them back into a single byte
+    return (topNibble << 4) | bottomNibble;
 }
 
 async function connectStrydPod() {
@@ -466,7 +483,12 @@ async function updateUI() {
         
         if (isGaugeInitialized) {
             let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
-            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, COLOR_GREEN));
+            
+            // 1. Calculate the dynamic color based on the current percentage
+            let dynamicColor = getGaugeTimeColor(percent);
+            
+            // 2. Set the color and draw the gauge
+            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, dynamicColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
