@@ -186,7 +186,7 @@ function getCurrentStepInfo() {
                 let nMin = parseInt(rows[i+1].querySelector('.w-min').value) || 0;
                 let nMax = parseInt(rows[i+1].querySelector('.w-max').value) || 0;
                 let nTime = parseFloat(rows[i+1].querySelector('.w-time').value) || 0;
-                current.nextText = `${nMin}-${nMax}w ${nTime}m`;
+                current.nextText = `${nMin} - ${nMax}w @ ${nTime}m`;
             }
             return current;
         } else {
@@ -251,7 +251,7 @@ function createCfgWriteCmd(name, version, password) {
 function createGaugeSaveCmd() {
     let cmd = new Uint8Array(17);
     // Bytes 11 and 12 changed to 0x00, 0x66 (inner radius = 102) to cut the thickness in half
-    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x66, 0x0C, 0x04, 0x00, 0xAA], 0);
+    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x66, 0x03, 0x0D, 0x00, 0xAA], 0);
     return cmd;
 }
 
@@ -459,8 +459,8 @@ async function updateUI() {
     let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
     
     // Determine if the workout is finished
-    let isWorkoutFinished = stepInfo.nextText === "           ----- Done -----";
-    let nextText = isWorkoutFinished ? "Done" : `next: ${stepInfo.nextText} w`;
+    let isWorkoutFinished = stepInfo.nextText === "Done";
+    let nextText = isWorkoutFinished ? "        ------  Done  ------" : `next: ${stepInfo.nextText}`;
     let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
