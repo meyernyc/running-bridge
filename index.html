@@ -36,7 +36,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v5.3</span> 🚀</h2>
+    <h2>Engo 3 Setup <span class="version">v5.4</span> 🚀</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>2. Connect Stryd</button>
@@ -67,7 +67,12 @@
     <div class="config-panel">
         <h3 style="margin-top:0; font-size:15px; color:#4caf50;">HUD Settings ⚙️</h3>
         <div class="config-row">
-            <label style="min-width:80px;">Brightness:</label>
+            <label style="min-width:125px;">Gauge Countdown:</label>
+            <input type="number" id="countdown-sec" value="30" min="0" title="Seconds to countdown before step ends"> 
+            <span style="font-size:12px; color:#aaa; margin-left:5px;">sec</span>
+        </div>
+        <div class="config-row">
+            <label style="min-width:125px;">Brightness:</label>
             <input type="range" id="brightness-slider" min="0" max="15" value="15" 
                    oninput="document.getElementById('brightness-val').innerText = this.value; updateBrightnessDebounced(this.value);" 
                    style="flex-grow:1; margin: 0 10px;">
@@ -552,7 +557,19 @@ async function updateUI() {
         let powerColor = getPowerColor(currentPower, stepInfo.min, stepInfo.max);
         
         if (isGaugeInitialized) {
-            let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
+            let percent = 0;
+            let countdownSec = parseInt(document.getElementById('countdown-sec').value) || 0;
+            let countdownMs = countdownSec * 1000;
+
+            // Check if we are inside the user-defined countdown window at the end of a step
+            if (countdownMs > 0 && stepInfo.remaining <= countdownMs && stepInfo.remaining > 0) {
+                // Map the remaining time over the user-entered seconds directly to a 100-0% scale
+                percent = (stepInfo.remaining / countdownMs) * 100;
+            } else {
+                // Default step progression display behavior outside of the countdown window
+                percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
+            }
+
             let dynamicColor = getGaugeTimeColor(percent);
             
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, dynamicColor));
