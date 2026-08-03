@@ -86,16 +86,16 @@
             <div id="view-next" class="metric-subtext" style="color: #ff9800; font-weight: bold;"></div>
         </div>
         <div class="metric">
+            <div id="view-tim" class="metric-value">0:00</div>
+            <div class="metric-label">Time</div>
+        </div>
+        <div class="metric">
             <div id="view-pce" class="metric-value">--:--</div>
             <div class="metric-label">Pace</div>
         </div>
         <div class="metric">
             <div id="view-dst" class="metric-value">0.00 mi</div>
             <div class="metric-label">Distance</div>
-        </div>
-        <div class="metric">
-            <div id="view-tim" class="metric-value">0:00</div>
-            <div class="metric-label">Time</div>
         </div>
     </div>
     
@@ -114,13 +114,13 @@ let currentPower = 0;
 let currentPace = "--:--";
 let currentDistance = "0.00";
 let isUpdatingHUD = false; 
-let isDisplayReady = false; // true once the glasses are connected & initial setup is done
+let isDisplayReady = false;
 
 let movingTimeMilli = 0;
 let lastRscTime = 0;
 let currentMovingTimeStr = "0:00";
 
-let wakeLock = null; // Wake Lock Sentinel
+let wakeLock = null;
 
 const ENGO_SERVICE_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cb7';
 const ENGO_RX_CHAR_UUID    = '0783b03e-8535-b5a0-7140-a304d2495cba';
@@ -138,23 +138,17 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
     
-// Turn off ONLY auto-brightness (Command 0x22), keeping gestures active
-// Data length is 1 byte for this command
 const CMD_SENSOR_OFF = new Uint8Array([0xFF, 0x22, 0x00, 0x01, 0x00, 0xAA]); 
     
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x3C;
 const COLOR_GREEN = 0xC3;
 
-// ----------------- PROGRESS ARC GEOMETRY ----------------- //
-// Replaces the old ActiveLook "gauge" object (which has a fixed,
-// non-configurable color) with a hand-drawn arc, which respects
-// the color (0x30) command like every other primitive shape.
-const ARC_CENTER_X   = 151; // roughly screen center (was gauge x)
-const ARC_CENTER_Y   = 147; // roughly screen center (was gauge y)
-const ARC_RADIUS     = 123; // midpoint of old gauge outer(110)/inner(102) radii
-const ARC_THICKNESS  = 8;   // ring thickness in pixels
-const ARC_START_ANGLE = -90; // 0deg = 3 o'clock, increasing clockwise -> -90 = 12 o'clock (top)
+const ARC_CENTER_X   = 151;
+const ARC_CENTER_Y   = 147;
+const ARC_RADIUS     = 123;
+const ARC_THICKNESS  = 8;  
+const ARC_START_ANGLE = -90;
 
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
@@ -239,22 +233,15 @@ function getCurrentStepInfo() {
     return current;
 }
 
-// ----------------- ACTIVELOOK COMMANDS ----------------- //
-
-// Sets the grey level (0-15) used to draw the next graphical element.
-// This is what actually controls the color of the arc drawn below.
 function createColorCmd(colorVal) {
     return new Uint8Array([0xFF, 0x30, 0x00, 0x06, colorVal & 0xFF, 0xAA]);
 }
 
-// Wraps a signed 16-bit value into its two-byte big-endian, two's-complement form.
 function s16Bytes(val) {
     let v = val & 0xFFFF;
     return [(v >> 8) & 0xFF, v & 0xFF];
 }
 
-// Draws an arc (ring segment) at (x,y) with radius r and given thickness.
-// Angles are in degrees: 0deg = 3 o'clock, increasing clockwise.
 function createArcCmd(x, y, r, angleStart, angleEnd, thickness) {
     let [xHi, xLo] = s16Bytes(x);
     let [yHi, yLo] = s16Bytes(y);
@@ -311,8 +298,6 @@ function createCfgWriteCmd(name, version, password) {
     return cmd;
 }
 
-// ----------------- WAKE LOCK LOGIC ----------------- //
-
 async function requestWakeLock() {
     if ('wakeLock' in navigator) {
         try {
@@ -334,8 +319,6 @@ document.addEventListener('visibilitychange', async () => {
         await requestWakeLock();
     }
 });
-
-// ----------------- BLUETOOTH CONNECTION & BRIGHTNESS LOGIC ----------------- //
 
 function updateStatus(msg) {
     const statusElement = document.getElementById('status');
@@ -363,23 +346,19 @@ function updateBrightnessDebounced(level) {
 async function updateBrightness(level) {
     if (!engoRxCharacteristic) return;
     
-    // Wait if the HUD is currently drawing text/arc to prevent a BLE collision
     while (isUpdatingHUD) {
         await delay(50);
     }
     
-    // Lock the BLE characteristic so updateUI() doesn't interrupt us
     isUpdatingHUD = true; 
     
     try {
         let numLevel = parseInt(level);
         
-        // Force the Ambient Light Sensor off again just in case the glasses re-enabled it
         let cmdAlsOff = new Uint8Array([0xFF, 0x22, 0x00, 0x01, 0x00, 0xAA]);
         await engoRxCharacteristic.writeValueWithResponse(cmdAlsOff);
         await delay(25);
         
-        // Send the new brightness level using WithResponse to guarantee acknowledgment
         let cmdBrightness = new Uint8Array([0xFF, 0x10, 0x00, 0x01, numLevel, 0xAA]);
         await engoRxCharacteristic.writeValueWithResponse(cmdBrightness);
         debugLog("Brightness set to " + numLevel);
@@ -387,7 +366,6 @@ async function updateBrightness(level) {
     } catch (e) {
         debugLog("Failed to update brightness: " + e.message);
     } finally {
-        // Unlock the BLE characteristic so the Stryd data can resume updating
         isUpdatingHUD = false; 
     }
 }
@@ -416,11 +394,9 @@ async function connectEngoGlasses() {
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
 
-        // Turn off auto-brightness (but keep gesture)
         await engoRxCharacteristic.writeValueWithResponse(CMD_SENSOR_OFF);
         await delay(50);
         
-        // Grab current slider value and apply it upon connection
         let initialBrightness = parseInt(document.getElementById('brightness-slider').value);
         let cmdBrightness = new Uint8Array([0xFF, 0x10, 0x00, 0x01, initialBrightness, 0xAA]);
         await engoRxCharacteristic.writeValueWithResponse(cmdBrightness);
@@ -450,8 +426,6 @@ function getPowerColor(power, min, max) {
     return COLOR_DEFAULT_WHITE;  
 }
 
-// Grey-level gradient (green -> red) used for the arc while NOT in the
-// final countdown window, based on how much of the step remains.
 function getProgressArcColor(percent) {
     let clampedPercent = Math.max(0, Math.min(100, percent));
     let ratio = clampedPercent / 100; 
@@ -548,18 +522,15 @@ function processIncomingCP(event) {
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
     
-    // Format the remaining time for the current step
     let timeRemainingStr = formatTime(stepInfo.remaining);
     
-    // Append the time remaining to the right of the target power
     let rangeText = `${stepInfo.min} - ${stepInfo.max}w  ${timeRemainingStr}`;
     
     let isWorkoutFinished = stepInfo.nextText === "Done";
     let nextText = "";
     
-    // Only display next step text if remaining time is 1 minute (60000ms) or less
     if (stepInfo.remaining <= 60000) {
-        nextText = isWorkoutFinished ? "           Done" : `${stepInfo.nextText}`;
+        nextText = isWorkoutFinished ? "            Done" : `${stepInfo.nextText}`;
     }
     
     let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_DEFAULT_WHITE ;
@@ -574,7 +545,6 @@ async function updateUI() {
     viewNextEl.innerText = nextText;
     viewNextEl.style.color = isWorkoutFinished ? '#ffffff' : '#ff9800';
 
-    // The lock that prevents this function from running if the brightness slider is currently sending commands
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
     
@@ -589,27 +559,19 @@ async function updateUI() {
             let countdownMs = stepInfo.countdownSec * 1000;
             let dynamicColor = COLOR_GREEN;
 
-            // Check if we are inside the user-defined countdown window at the end of a step
             if (countdownMs > 0 && stepInfo.remaining <= countdownMs && stepInfo.remaining > 0) {
-                // Map the remaining time over the user-entered seconds directly to a 100-0% scale
                 percent = (stepInfo.remaining / countdownMs) * 100;
-                // Switch the arc color to bright red during the final countdown
                 dynamicColor = COLOR_BRIGHT_RED;
             } else {
-                // Default step progression display behavior outside of the countdown window
                 percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
                 dynamicColor = getProgressArcColor(percent);
             }
 
             let clampedPercent = Math.min(Math.max(percent, 0), 100);
             
-            // To animate a clockwise countdown, fix the end angle at 12 o'clock (270 degrees) 
-            // and advance the start angle as time decreases.
             let sweepStartAngle = (ARC_START_ANGLE + 360) - (clampedPercent / 100) * 360;
-            let sweepEndAngle = ARC_START_ANGLE + 360; // Fixed at 270 degrees
+            let sweepEndAngle = ARC_START_ANGLE + 360; 
 
-            // Set the color, then draw the arc — arcs (unlike the old gauge object)
-            // actually respect whatever color was set right before them.
             await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(COLOR_GREEN));
             await engoRxCharacteristic.writeValueWithoutResponse(
                 createArcCmd(ARC_CENTER_X, ARC_CENTER_Y, ARC_RADIUS, sweepStartAngle, sweepEndAngle, ARC_THICKNESS)
@@ -620,12 +582,15 @@ async function updateUI() {
         let cmdPower = createActiveLookColorTextCmd(200, 185, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
+        // --- ADDED: Total Moving Time text, drawn 30 pixels above the pace ---
+        const timeText = `${currentMovingTimeStr}`;
+        await sendThickText(engoRxCharacteristic, 180, 245, timeText, 0x05, COLOR_GREEN);
+
         const paceText = `${currentPace} /mi`;
         await sendThickText(engoRxCharacteristic, 180, 215, paceText, 0x05, COLOR_GREEN);
         
         await sendThickText(engoRxCharacteristic, 230, 115, rangeText, 0x05, COLOR_GREEN);
         
-        // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
             await sendThickText(engoRxCharacteristic, 230, 85, nextText, 0x05, nextTextColor);
         }
