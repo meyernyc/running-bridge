@@ -120,6 +120,10 @@ const CMD_CLEAR      = new Uint8Array([0xFF, 0x01, 0x00, 0x05, 0xAA]);
 const CMD_HOLD_ON    = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x00, 0xAA]); 
 const CMD_HOLD_FLUSH = new Uint8Array([0xFF, 0x39, 0x00, 0x06, 0x01, 0xAA]); 
 
+// Brightness control commands
+const CMD_SENSOR_OFF = new Uint8Array([0xFF, 0x0B, 0x00, 0x06, 0x00, 0xAA]); 
+const CMD_MAX_LUMA   = new Uint8Array([0xFF, 0x0A, 0x00, 0x06, 0x0F, 0xAA]); 
+
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x3C;
 const COLOR_GREEN = 0xC3;
@@ -256,11 +260,7 @@ function createGaugeSaveCmd() {
 }
 
 function createGaugeDisplayCmd(gaugeId, percent) {
-    // The gauge has 10 sections. Quantize to 10% steps to ensure sections disappear equally
-    // Subtract a tiny epsilon to handle floating-point inaccuracies exactly at the threshold
     let safePercent = Math.max(0, percent - 0.0001); 
-    
-    // Convert to exactly 0, 1, 2...10 sections, then multiply by 10 to feed 0-100% bounds
     let sections = Math.ceil(safePercent / 10);
     let quantizedPercent = sections * 10;
     
@@ -334,6 +334,14 @@ async function connectEngoGlasses() {
         
         await engoRxCharacteristic.writeValueWithResponse(CMD_CLEAR);
         await delay(100);
+
+        // --- NEW: SET BRIGHTNESS TO MAX ---
+        await engoRxCharacteristic.writeValueWithResponse(CMD_SENSOR_OFF);
+        await delay(50);
+        await engoRxCharacteristic.writeValueWithResponse(CMD_MAX_LUMA);
+        await delay(50);
+        // ----------------------------------
+
         await engoRxCharacteristic.writeValueWithResponse(createCfgWriteCmd(CFG_NAME, cfgVersion, CFG_PASSWORD));
         await delay(200);
         await engoRxCharacteristic.writeValueWithResponse(createGaugeSaveCmd());
@@ -342,7 +350,6 @@ async function connectEngoGlasses() {
 
         const linkedText = "LINKED";
         await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
-//        await delay(50);
         const waitingText = "Waiting for Stryd...";
         await sendThickText(engoRxCharacteristic, 294, 181, waitingText, 0x02, 0xFF, true);
 
