@@ -256,8 +256,15 @@ function createGaugeSaveCmd() {
 }
 
 function createGaugeDisplayCmd(gaugeId, percent) {
-    // USING Math.ceil() INSTEAD OF Math.round() HERE TO PREVENT PREMATURE 0%
-    let clampedPercent = Math.min(Math.max(Math.ceil(percent), 0), 100);
+    // The gauge has 10 sections. Quantize to 10% steps to ensure sections disappear equally
+    // Subtract a tiny epsilon to handle floating-point inaccuracies exactly at the threshold
+    let safePercent = Math.max(0, percent - 0.0001); 
+    
+    // Convert to exactly 0, 1, 2...10 sections, then multiply by 10 to feed 0-100% bounds
+    let sections = Math.ceil(safePercent / 10);
+    let quantizedPercent = sections * 10;
+    
+    let clampedPercent = Math.min(Math.max(quantizedPercent, 0), 100);
     return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
@@ -362,7 +369,7 @@ function getGaugeTimeColor(percent) {
     let ratio = clampedPercent / 100; 
 
     // Blend the top hex value from 0xC (12) down to 0x3 (3)
-    let topNibble = Math.round(3 + (9 * ratio));    
+    let topNibble = Math.round(3 + (9 * ratio));   
     
     // Blend the bottom hex value from 0x3 (3) up to 0xC (12)
     let bottomNibble = Math.round(12 - (9 * ratio)); 
