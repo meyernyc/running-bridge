@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stryd to Engo 3 HUD Bridge</title>
+    <title>Stryd to Engo 3 HUD Bridge (18px Font Edition)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0; background-color: #121212; color: #ffffff; }
         .dashboard { display: flex; justify-content: space-between; margin-top: 20px; padding: 20px; background: #1e1e1e; border-radius: 10px; flex-wrap: wrap; }
@@ -32,10 +32,11 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v5.0</span> 🚀</h2>
+    <h2>Engo 3 Setup <span class="version">v6.0 (18px Font in 0x05)</span> 🚀</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
-        <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>2. Connect Stryd</button>
+        <button id="btn-font" class="main-btn" onclick="installCustomFont()" disabled style="background-color: #9C27B0;">2. Install 18px Font</button>
+        <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>3. Connect Stryd</button>
     </div>
     
     <div class="config-panel">
@@ -257,6 +258,144 @@ function createGaugeDisplayCmd(gaugeId, percent) {
     return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
+// ----------------- CUSTOM 18px FONT COMPILER ----------------- //
+
+function encodeActiveLookChar(pixels, width, height) {
+    let stream = [];
+    let currentBit = false; 
+    let count = 0;
+    
+    for (let p of pixels) {
+        if (p === currentBit) {
+            count++;
+        } else {
+            if (count > 0 || stream.length === 0) stream.push({ val: currentBit, count: count });
+            currentBit = p;
+            count = 1;
+        }
+    }
+    stream.push({ val: currentBit, count: count });
+
+    if (stream.length > 0 && stream[0].val === true) stream.unshift({ val: false, count: 0 });
+    if (stream.length % 2 !== 0) stream.push({ val: true, count: 0 });
+
+    let bytes = [];
+    for (let i = 0; i < stream.length; i += 2) {
+        let off = stream[i].count;
+        let on = stream[i+1].count;
+
+        while (off > 0 || on > 0) {
+            let cOff = Math.min(off, 15);
+            let cOn = 0;
+            if (cOff === off) cOn = Math.min(on, 15); 
+            
+            bytes.push((cOff << 4) | cOn);
+            off -= cOff;
+            on -= cOn;
+        }
+    }
+    
+    let length = bytes.length + 2;
+    return [length, width, ...bytes];
+}
+
+function generateCustomNumberFont() {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Configured for 18px size
+    const fontSize = 18; 
+    
+    const definedChars = [' ', '0','1','2','3','4','5','6','7','8','9','w','n','x','t','-','m','D','o','e']; // Added characters needed for range & next text
+    const firstChar = 32; 
+    const lastChar = 120; 
+
+    let charDataMap = {};
+    let charDataBuffer = [];
+    let currentOffset = 0;
+
+    for (let char of definedChars) {
+        let width = Math.max(1, Math.ceil(ctx.measureText(char).width));
+        if (char === ' ') width = 6; // Spacing adjustment for 18px
+
+        canvas.width = width;
+        canvas.height = fontSize;
+        ctx.clearRect(0, 0, width, fontSize);
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        ctx.fillStyle = "white";
+        ctx.textBaseline = "top";
+        ctx.fillText(char, 0, 0);
+
+        let imgData = ctx.getImageData(0, 0, width, fontSize).data;
+        let pixels = [];
+        for (let p = 0; p < imgData.length; p += 4) {
+            pixels.push(imgData[p+3] > 127); 
+        }
+
+        let bytes = encodeActiveLookChar(pixels, width, fontSize);
+        
+        if (bytes.length > 255) {
+            bytes = bytes.slice(0, 255);
+            bytes[0] = 255;
+        }
+
+        charDataMap[char] = { offset: currentOffset, bytes: bytes };
+        currentOffset += bytes.length;
+        charDataBuffer.push(...bytes);
+    }
+
+    let payload = [0x02, fontSize, (firstChar >> 8) & 0xFF, firstChar & 0xFF, (lastChar >> 8) & 0xFF, lastChar & 0xFF];
+    let spaceOffset = charDataMap[' '].offset;
+    
+    for (let i = firstChar; i <= lastChar; i++) {
+        let char = String.fromCharCode(i);
+        let off = charDataMap[char] ? charDataMap[char].offset : spaceOffset;
+        payload.push((off >> 8) & 0xFF, off & 0xFF);
+    }
+
+    payload.push(...charDataBuffer);
+    return payload;
+}
+
+async function installCustomFont() {
+    if (!engoRxCharacteristic) return;
+    document.getElementById('btn-font').disabled = true;
+    updateStatus("Compiling 18px Bold Font...");
+    
+    let fontPayload = generateCustomNumberFont();
+    let size = fontPayload.length;
+    let fontId = 0x05; // SAVING TO 0x05
+
+    try {
+        let init = new Uint8Array([0xFF, 0x51, 0x00, 0x08, fontId, (size >> 8) & 0xFF, size & 0xFF, 0xAA]);
+        await engoRxCharacteristic.writeValueWithResponse(init);
+        await delay(100);
+
+        let offset = 0;
+        while (offset < size) {
+            let chunkData = fontPayload.slice(offset, offset + 220);
+            let totalLen = chunkData.length + 5;
+            let chunk = new Uint8Array(totalLen);
+            chunk[0] = 0xFF; chunk[1] = 0x51;
+            chunk[2] = (totalLen >> 8) & 0xFF;
+            chunk[3] = totalLen & 0xFF;
+            chunk.set(chunkData, 4);
+            chunk[totalLen - 1] = 0xAA;
+            
+            await engoRxCharacteristic.writeValueWithResponse(chunk);
+            offset += chunkData.length;
+            updateStatus(`Flashing Font to Slot 0x05... ${Math.round((offset/size)*100)}%`);
+            await delay(40);
+        }
+        updateStatus("18px Font Installed! Click 'Connect Stryd'.");
+        document.getElementById('btn-stryd').disabled = false;
+        document.getElementById('btn-font').style.display = 'none'; // Hide when done
+    } catch (e) {
+        updateStatus("Font Upload Failed: " + e.message);
+        document.getElementById('btn-font').disabled = false;
+    }
+}
+
 // ----------------- BLUETOOTH CONNECTION LOGIC ----------------- //
 
 function updateStatus(msg) {
@@ -305,9 +444,9 @@ async function connectEngoGlasses() {
         await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
         await delay(50);
         
-        updateStatus("Glasses connected! Click 'Connect Stryd'.");
+        updateStatus("Glasses connected! Click 'Install 18px Font'.");
         document.getElementById('btn-engo').style.backgroundColor = '#555';
-        document.getElementById('btn-stryd').disabled = false;
+        document.getElementById('btn-font').disabled = false;
         
     } catch (error) {
         updateStatus("Engo Connection Failure: " + error.message);
@@ -408,22 +547,14 @@ function processIncomingCP(event) {
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
     let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
-    
-    // Determine if the workout is finished
-    let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "Done" : `nxt ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_BRIGHT_RED;
+    let nextText = stepInfo.nextText === "Done" ? "nxt Done" : `nxt ${stepInfo.nextText}`;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
     document.getElementById('view-pwr-range').innerText = rangeText;
-    
-    // Update the browser view for the next step, matching the white color logic
-    const viewNextEl = document.getElementById('view-next');
-    viewNextEl.innerText = nextText;
-    viewNextEl.style.color = isWorkoutFinished ? '#ffffff' : '#ff9800';
+    document.getElementById('view-next').innerText = nextText;
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
@@ -436,24 +567,26 @@ async function updateUI() {
         
         if (isGaugeInitialized) {
             let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
-            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, COLOR_GREEN));
+            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, powerColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
-        // 1. Power Value (Custom 70px Font 0x04, Moved X to 130 to accommodate wider text)
-        const powerText = `${currentPower}`;
-        let cmdPower = createActiveLookColorTextCmd(200, 160, powerText, powerText.length, 0x04, powerColor);
+        // 1. Power Value (Using the massive 70px font saved in slot 0x04)
+        const powerText = `${currentPower} w`;
+        let cmdPower = createActiveLookColorTextCmd(130, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
-        // 2. Current Step Target Range (y=115, medium font 0x01, thick effect)
-        await sendThickText(engoRxCharacteristic, 210, 100, rangeText, 0x01, COLOR_GREEN);
+        // 2. Current Step Target Range (y=115, using new custom 18px font 0x05)
+        let cmdRange = createActiveLookColorTextCmd(210, 115, rangeText, rangeText.length, 0x05, 0x3C);
+        await engoRxCharacteristic.writeValueWithoutResponse(cmdRange);
         
-        // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
-        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x01, nextTextColor);
+        // 3. Next Step Info line (y=70, using new custom 18px font 0x05)
+        let cmdNext = createActiveLookColorTextCmd(220, 70, nextText, nextText.length, 0x05, 0x39);
+        await engoRxCharacteristic.writeValueWithoutResponse(cmdNext);
         
-        // 4. Time & Distance Secondary line (y=45, medium font 0x01, default color, thick effect)
+        // 4. Time & Distance Secondary line (y=45, medium built-in font 0x01, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, COLOR_DEFAULT_WHITE);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
