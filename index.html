@@ -36,7 +36,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v5.5</span> 🚀</h2>
+    <h2>Engo 3 Setup <span class="version">v5.6</span> 🚀</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled>2. Connect Stryd</button>
@@ -114,7 +114,7 @@ let currentPower = 0;
 let currentPace = "--:--";
 let currentDistance = "0.00";
 let isUpdatingHUD = false; 
-let isGaugeInitialized = false;
+let isDisplayReady = false; // true once the glasses are connected & initial setup is done
 
 let movingTimeMilli = 0;
 let lastRscTime = 0;
@@ -145,6 +145,16 @@ const CMD_SENSOR_OFF = new Uint8Array([0xFF, 0x22, 0x00, 0x01, 0x00, 0xAA]);
 const COLOR_DEFAULT_WHITE = 15;
 const COLOR_BRIGHT_RED = 0x3C;
 const COLOR_GREEN = 0xC3;
+
+// ----------------- PROGRESS ARC GEOMETRY ----------------- //
+// Replaces the old ActiveLook "gauge" object (which has a fixed,
+// non-configurable color) with a hand-drawn arc, which respects
+// the color (0x30) command like every other primitive shape.
+const ARC_CENTER_X   = 151; // roughly screen center (was gauge x)
+const ARC_CENTER_Y   = 127; // roughly screen center (was gauge y)
+const ARC_RADIUS     = 106; // midpoint of old gauge outer(110)/inner(102) radii
+const ARC_THICKNESS  = 8;   // ring thickness in pixels
+const ARC_START_ANGLE = -90; // 0deg = 3 o'clock, increasing clockwise -> -90 = 12 o'clock (top)
 
 function formatTime(ms) {
     let totalSec = Math.floor(ms / 1000);
@@ -231,16 +241,37 @@ function getCurrentStepInfo() {
 
 // ----------------- ACTIVELOOK COMMANDS ----------------- //
 
-//function createGaugeColorCmd(gaugeId, colorIndex) {
-//    return new Uint8Array([0xFF, 0x42, 0x00, 0x02, gaugeId & 0xFF, colorIndex & 0xFF, 0xAA]);
-//}
-
-// There is no dedicated "gauge color" command in the ActiveLook API.
-// Gauges draw using whatever grey level was last set with the general
-// `color` command (0x30) — same as circles, rects, and every other shape.
+// Sets the grey level (0-15) used to draw the next graphical element.
+// This is what actually controls the color of the arc drawn below.
 function createColorCmd(colorVal) {
     return new Uint8Array([0xFF, 0x30, 0x00, 0x06, colorVal & 0xFF, 0xAA]);
 }
+
+// Wraps a signed 16-bit value into its two-byte big-endian, two's-complement form.
+function s16Bytes(val) {
+    let v = val & 0xFFFF;
+    return [(v >> 8) & 0xFF, v & 0xFF];
+}
+
+// Draws an arc (ring segment) at (x,y) with radius r and given thickness.
+// Angles are in degrees: 0deg = 3 o'clock, increasing clockwise.
+function createArcCmd(x, y, r, angleStart, angleEnd, thickness) {
+    let [xHi, xLo] = s16Bytes(x);
+    let [yHi, yLo] = s16Bytes(y);
+    let [asHi, asLo] = s16Bytes(Math.round(angleStart));
+    let [aeHi, aeLo] = s16Bytes(Math.round(angleEnd));
+    return new Uint8Array([
+        0xFF, 0x3C, 0x00, 0x0F,
+        xHi, xLo,
+        yHi, yLo,
+        r & 0xFF,
+        asHi, asLo,
+        aeHi, aeLo,
+        thickness & 0xFF,
+        0xAA
+    ]);
+}
+
 function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let safeLength = Math.min(textBytes.length, textLength);
@@ -278,21 +309,6 @@ function createCfgWriteCmd(name, version, password) {
     cmd[offset] = (password >>> 24) & 0xFF; cmd[offset + 1] = (password >>> 16) & 0xFF; cmd[offset + 2] = (password >>> 8) & 0xFF; cmd[offset + 3] = password & 0xFF; offset += 4;
     cmd[offset] = 0xAA;
     return cmd;
-}
-
-function createGaugeSaveCmd() {
-    let cmd = new Uint8Array(17);
-    cmd.set([0xFF, 0x71, 0x00, 0x11, 0x01, 0x00, 0x97, 0x00, 0x7F, 0x00, 0x6E, 0x00, 0x66, 0x0D, 0x04, 0x00, 0xAA], 0);
-    return cmd;
-}
-
-function createGaugeDisplayCmd(gaugeId, percent) {
-    let safePercent = Math.max(0, percent - 0.0001); 
-    let sections = Math.ceil(safePercent / 10);
-    let quantizedPercent = sections * 10;
-    
-    let clampedPercent = Math.min(Math.max(quantizedPercent, 0), 100);
-    return new Uint8Array([0xFF, 0x70, 0x00, 0x07, gaugeId & 0xFF, clampedPercent & 0xFF, 0xAA]);
 }
 
 // ----------------- WAKE LOCK LOGIC ----------------- //
@@ -347,7 +363,7 @@ function updateBrightnessDebounced(level) {
 async function updateBrightness(level) {
     if (!engoRxCharacteristic) return;
     
-    // Wait if the HUD is currently drawing text/gauges to prevent a BLE collision
+    // Wait if the HUD is currently drawing text/arc to prevent a BLE collision
     while (isUpdatingHUD) {
         await delay(50);
     }
@@ -388,7 +404,7 @@ async function connectEngoGlasses() {
         
         engoDevice.addEventListener('gattserverdisconnected', () => {
             updateStatus("Engo Disconnected.");
-            isGaugeInitialized = false;
+            isDisplayReady = false;
         });
         
         updateStatus("Connecting to ActiveLook engine...");
@@ -412,9 +428,7 @@ async function connectEngoGlasses() {
 
         await engoRxCharacteristic.writeValueWithResponse(createCfgWriteCmd(CFG_NAME, cfgVersion, CFG_PASSWORD));
         await delay(200);
-        await engoRxCharacteristic.writeValueWithResponse(createGaugeSaveCmd());
-        await delay(100);
-        isGaugeInitialized = true;
+        isDisplayReady = true;
 
         const linkedText = "LINKED";
         await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
@@ -436,7 +450,9 @@ function getPowerColor(power, min, max) {
     return COLOR_DEFAULT_WHITE;  
 }
 
-function getGaugeTimeColor(percent) {
+// Grey-level gradient (green -> red) used for the arc while NOT in the
+// final countdown window, based on how much of the step remains.
+function getProgressArcColor(percent) {
     let clampedPercent = Math.max(0, Math.min(100, percent));
     let ratio = clampedPercent / 100; 
     let topNibble = Math.round(3 + (9 * ratio));   
@@ -563,7 +579,7 @@ async function updateUI() {
         
         let powerColor = getPowerColor(currentPower, stepInfo.min, stepInfo.max);
         
-        if (isGaugeInitialized) {
+        if (isDisplayReady) {
             let percent = 0;
             let countdownMs = stepInfo.countdownSec * 1000;
             let dynamicColor = COLOR_GREEN;
@@ -572,22 +588,23 @@ async function updateUI() {
             if (countdownMs > 0 && stepInfo.remaining <= countdownMs && stepInfo.remaining > 0) {
                 // Map the remaining time over the user-entered seconds directly to a 100-0% scale
                 percent = (stepInfo.remaining / countdownMs) * 100;
-                // Switch the gauge color to bright red during the final countdown
+                // Switch the arc color to bright red during the final countdown
                 dynamicColor = COLOR_BRIGHT_RED;
             } else {
                 // Default step progression display behavior outside of the countdown window
                 percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
-                dynamicColor = getGaugeTimeColor(percent);
+                dynamicColor = getProgressArcColor(percent);
             }
-            
 
-            // old:
-            // await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, dynamicColor));
-            // await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
+            let clampedPercent = Math.min(Math.max(percent, 0), 100);
+            let sweepEndAngle = ARC_START_ANGLE + (clampedPercent / 100) * 360;
 
-            // new:
+            // Set the color, then draw the arc — arcs (unlike the old gauge object)
+            // actually respect whatever color was set right before them.
             await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(dynamicColor));
-            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
+            await engoRxCharacteristic.writeValueWithoutResponse(
+                createArcCmd(ARC_CENTER_X, ARC_CENTER_Y, ARC_RADIUS, ARC_START_ANGLE, sweepEndAngle, ARC_THICKNESS)
+            );
         }
 
         const powerText = `${currentPower}`;
