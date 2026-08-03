@@ -622,7 +622,7 @@ async function updateUI() {
         
         // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
-            await sendThickText(engoRxCharacteristic, 230, 70, nextText, 0x05, nextTextColor);
+            await sendThickText(engoRxCharacteristic, 230, 85, nextText, 0x05, nextTextColor);
         }
         
         const secText = `${currentDistance} mi`;
