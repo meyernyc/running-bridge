@@ -231,10 +231,16 @@ function getCurrentStepInfo() {
 
 // ----------------- ACTIVELOOK COMMANDS ----------------- //
 
-function createGaugeColorCmd(gaugeId, colorIndex) {
-    return new Uint8Array([0xFF, 0x42, 0x00, 0x02, gaugeId & 0xFF, colorIndex & 0xFF, 0xAA]);
-}
+//function createGaugeColorCmd(gaugeId, colorIndex) {
+//    return new Uint8Array([0xFF, 0x42, 0x00, 0x02, gaugeId & 0xFF, colorIndex & 0xFF, 0xAA]);
+//}
 
+// There is no dedicated "gauge color" command in the ActiveLook API.
+// Gauges draw using whatever grey level was last set with the general
+// `color` command (0x30) — same as circles, rects, and every other shape.
+function createColorCmd(colorVal) {
+    return new Uint8Array([0xFF, 0x30, 0x00, 0x06, colorVal & 0xFF, 0xAA]);
+}
 function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, colorVal = 0x0F, rot = 0x04) {
     let textBytes = new TextEncoder().encode(text);
     let safeLength = Math.min(textBytes.length, textLength);
@@ -574,7 +580,13 @@ async function updateUI() {
                 dynamicColor = getGaugeTimeColor(percent);
             }
             
-            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, dynamicColor));
+
+            // old:
+            // await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, dynamicColor));
+            // await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
+
+            // new:
+            await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(dynamicColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
