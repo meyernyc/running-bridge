@@ -408,14 +408,22 @@ function processIncomingCP(event) {
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
     let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
-    let nextText = stepInfo.nextText === "Done" ? "nxt Done" : `nxt ${stepInfo.nextText}`;
+    
+    // Determine if the workout is finished
+    let isWorkoutFinished = stepInfo.nextText === "Done";
+    let nextText = isWorkoutFinished ? "Workout Finished" : `nxt ${stepInfo.nextText}`;
+    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_BRIGHT_RED;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
     document.getElementById('view-pwr-range').innerText = rangeText;
-    document.getElementById('view-next').innerText = nextText;
+    
+    // Update the browser view for the next step, matching the white color logic
+    const viewNextEl = document.getElementById('view-next');
+    viewNextEl.innerText = nextText;
+    viewNextEl.style.color = isWorkoutFinished ? '#ffffff' : '#ff9800';
 
     if (!engoRxCharacteristic || isUpdatingHUD) return;
     isUpdatingHUD = true;
@@ -441,7 +449,7 @@ async function updateUI() {
         await sendThickText(engoRxCharacteristic, 210, 105, rangeText, 0x01, COLOR_GREEN);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
-        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x01, COLOR_BRIGHT_RED);
+        await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x01, nextTextColor);
         
         // 4. Time & Distance Secondary line (y=45, medium font 0x01, default color, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
