@@ -152,7 +152,7 @@ const COLOR_GREEN = 0xC3;
 // the color (0x30) command like every other primitive shape.
 const ARC_CENTER_X   = 151; // roughly screen center (was gauge x)
 const ARC_CENTER_Y   = 127; // roughly screen center (was gauge y)
-const ARC_RADIUS     = 106; // midpoint of old gauge outer(110)/inner(102) radii
+const ARC_RADIUS     = 110; // midpoint of old gauge outer(110)/inner(102) radii
 const ARC_THICKNESS  = 8;   // ring thickness in pixels
 const ARC_START_ANGLE = -90; // 0deg = 3 o'clock, increasing clockwise -> -90 = 12 o'clock (top)
 
@@ -597,16 +597,19 @@ async function updateUI() {
             }
 
             let clampedPercent = Math.min(Math.max(percent, 0), 100);
-            let sweepEndAngle = ARC_START_ANGLE + (clampedPercent / 100) * 360;
+            
+            // To animate a clockwise countdown, fix the end angle at 12 o'clock (270 degrees) 
+            // and advance the start angle as time decreases.
+            let sweepStartAngle = (ARC_START_ANGLE + 360) - (clampedPercent / 100) * 360;
+            let sweepEndAngle = ARC_START_ANGLE + 360; // Fixed at 270 degrees
 
             // Set the color, then draw the arc — arcs (unlike the old gauge object)
             // actually respect whatever color was set right before them.
 //            await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(dynamicColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(COLOR_GREEN));
             await engoRxCharacteristic.writeValueWithoutResponse(
-                createArcCmd(ARC_CENTER_X, ARC_CENTER_Y, ARC_RADIUS, ARC_START_ANGLE, sweepEndAngle, ARC_THICKNESS)
-            );
-        }
+                createArcCmd(ARC_CENTER_X, ARC_CENTER_Y, ARC_RADIUS, sweepStartAngle, sweepEndAngle, ARC_THICKNESS)
+            );        }
 
         const powerText = `${currentPower}`;
         let cmdPower = createActiveLookColorTextCmd(200, 170, powerText, powerText.length, 0x04, powerColor);
