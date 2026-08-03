@@ -44,14 +44,14 @@
             <div class="config-row workout-row">
                 <label class="step-label">Step 1:</label>
                 <input type="number" class="w-min" value="200" title="Min Power"> to 
-                <input type="number" class="w-max" value="250" title="Max Power"> W, 
+                <input type="number" class="w-max" value="250" title="Max Power"> w, 
                 <input type="number" class="w-time" value="10" title="Minutes"> min
                 <button class="btn-small remove-btn" onclick="removeRow(this)" style="visibility:hidden;">X</button>
             </div>
             <div class="config-row workout-row">
                 <label class="step-label">Step 2:</label>
                 <input type="number" class="w-min" value="260" title="Min Power"> to 
-                <input type="number" class="w-max" value="300" title="Max Power"> W, 
+                <input type="number" class="w-max" value="300" title="Max Power"> w, 
                 <input type="number" class="w-time" value="5" title="Minutes"> min
                 <button class="btn-small remove-btn" onclick="removeRow(this)">X</button>
             </div>
@@ -62,9 +62,9 @@
     <div id="status">Waiting to start...</div>
     <div class="dashboard">
         <div class="metric">
-            <div id="view-pwr" class="metric-value">-- W</div>
+            <div id="view-pwr" class="metric-value">-- w</div>
             <div class="metric-label">Power</div>
-            <div id="view-pwr-range" class="metric-subtext">200 - 250 W</div>
+            <div id="view-pwr-range" class="metric-subtext">200 - 250 w</div>
             <div id="view-next" class="metric-subtext" style="color: #ff9800; font-weight: bold;">nxt --</div>
         </div>
         <div class="metric">
@@ -158,7 +158,7 @@ function addWorkoutRow() {
     row.innerHTML = `
         <label class="step-label">Step X:</label>
         <input type="number" class="w-min" value="200"> to 
-        <input type="number" class="w-max" value="250"> W, 
+        <input type="number" class="w-max" value="250"> w, 
         <input type="number" class="w-time" value="5"> min
         <button class="btn-small remove-btn" onclick="removeRow(this)">X</button>
     `;
@@ -445,12 +445,12 @@ function processIncomingCP(event) {
 
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
-    let rangeText = `${stepInfo.min} - ${stepInfo.max} W`;
+    let rangeText = `${stepInfo.min} - ${stepInfo.max} w`;
     
     // Changed "Next: " to "nxt "
     let nextText = stepInfo.nextText === "Done" ? "nxt Done" : `nxt ${stepInfo.nextText}`;
 
-    document.getElementById('view-pwr').innerText = `${currentPower} W`;
+    document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
     document.getElementById('view-dst').innerText = `${currentDistance} mi`;
     document.getElementById('view-tim').innerText = currentMovingTimeStr;
@@ -473,14 +473,14 @@ async function updateUI() {
         }
 
         // 1. Power Value (Center, y=180, large font 0x03)
-        const powerText = `${currentPower} W`;
-        await sendThickText(engoRxCharacteristic, 220, 180, powerText, 0x03, powerColor);
+        const powerText = `${currentPower} w`;
+        await sendThickText(engoRxCharacteristic, 220, 170, powerText, 0x03, powerColor);
         
         // 2. Current Step Target Range (y=135, medium font 0x01)
-        await sendThickText(engoRxCharacteristic, 210, 135, rangeText, 0x01, 0x3C);
+        await sendThickText(engoRxCharacteristic, 210, 125, rangeText, 0x01, 0x3C);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=95)
-        await sendThickText(engoRxCharacteristic, 220, 95, nextText, 0x01, 0x39);
+        await sendThickText(engoRxCharacteristic, 220, 65, nextText, 0x01, 0x39);
         
         // 4. Time & Distance Secondary line (y=45, medium font 0x01) - Changed to COLOR_DEFAULT_WHITE
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
