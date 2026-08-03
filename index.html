@@ -32,7 +32,7 @@
     </style>
 </head>
 <body>
-    <h2>Engo 3 Setup <span class="version">v3.4 (Single Line Next)</span> 🌟</h2>
+    <h2>Engo 3 Setup <span class="version">v3.4 (Thick HUD Font)</span> 🌟</h2>
     <div style="display: flex; gap: 10px; margin-bottom: 10px;">
         <button id="btn-engo" class="main-btn" onclick="connectEngoGlasses()">1. Connect Engo</button>
         <button id="btn-stryd" class="main-btn" onclick="connectStrydPod()" disabled style="background-color: #555;">2. Connect Stryd</button>
@@ -210,10 +210,6 @@ function getCurrentStepInfo() {
     return current;
 }
 
-/**
- * Generates an ActiveLook compliant serialized byte array package 
- * to alter the specific layout parameters of an on-screen widget.
- */
 function createGaugeColorCmd(gaugeId, colorIndex) {
     const CMD_SET_GAUGE_COLOR = 0x42; 
     
@@ -239,6 +235,23 @@ function createActiveLookColorTextCmd(x, y, text, textLength, fontId = 0x02, col
     cmd.set(textBytes.slice(0, safeLength), 11);
     cmd[totalLen - 2] = 0x00; cmd[totalLen - 1] = 0xAA; 
     return cmd;
+}
+
+/**
+ * Helper function to create a bold effect on the Engo display 
+ * by drawing the text twice with a 1-pixel X-axis offset.
+ */
+async function sendThickText(char, x, y, text, fontId, colorVal, withResponse = false) {
+    let cmd1 = createActiveLookColorTextCmd(x, y, text, text.length, fontId, colorVal);
+    let cmd2 = createActiveLookColorTextCmd(x + 1, y, text, text.length, fontId, colorVal);
+    
+    if (withResponse) {
+        await char.writeValueWithResponse(cmd1);
+        await char.writeValueWithResponse(cmd2);
+    } else {
+        await char.writeValueWithoutResponse(cmd1);
+        await char.writeValueWithoutResponse(cmd2);
+    }
 }
 
 function createCfgWriteCmd(name, version, password) {
@@ -322,10 +335,10 @@ async function connectEngoGlasses() {
         isGaugeInitialized = true;
 
         const linkedText = "LINKED";
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 226, linkedText, linkedText.length, 0x02, 0xFF));
+        await sendThickText(engoRxCharacteristic, 294, 226, linkedText, 0x02, 0xFF, true);
         await delay(50);
         const waitingText = "Waiting for Stryd...";
-        await engoRxCharacteristic.writeValueWithResponse(createActiveLookColorTextCmd(294, 181, waitingText, waitingText.length, 0x02, 0xFF));
+        await sendThickText(engoRxCharacteristic, 294, 181, waitingText, 0x02, 0xFF, true);
         
         updateStatus("Glasses connected! Click 'Connect Stryd'.");
         const strydBtn = document.getElementById('btn-stryd');
@@ -458,17 +471,17 @@ async function updateUI() {
 
         // 1. Power Value (Center, y=180, large font 0x03)
         const powerText = `${currentPower} W`;
-        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(220, 180, powerText, powerText.length, 0x03, powerColor));
+        await sendThickText(engoRxCharacteristic, 220, 180, powerText, 0x03, powerColor);
         
         // 2. Current Step Target Range (y=135, medium font 0x01)
-        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(210, 135, rangeText, rangeText.length, 0x01, 0x3C));
+        await sendThickText(engoRxCharacteristic, 210, 135, rangeText, 0x01, 0x3C);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=95)
-        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(220, 95, nextText, nextText.length, 0x01, 0x39));
+        await sendThickText(engoRxCharacteristic, 220, 95, nextText, 0x01, 0x39);
         
         // 4. Time & Distance Secondary line (y=45, medium font 0x01)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await engoRxCharacteristic.writeValueWithoutResponse(createActiveLookColorTextCmd(198, 45, secText, secText.length, 0x01, 0x3C));
+        await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x01, 0x3C);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
