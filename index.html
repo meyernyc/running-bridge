@@ -152,7 +152,7 @@ const COLOR_GREEN = 0xC3;
 // the color (0x30) command like every other primitive shape.
 const ARC_CENTER_X   = 151; // roughly screen center (was gauge x)
 const ARC_CENTER_Y   = 127; // roughly screen center (was gauge y)
-const ARC_RADIUS     = 120; // midpoint of old gauge outer(110)/inner(102) radii
+const ARC_RADIUS     = 115; // midpoint of old gauge outer(110)/inner(102) radii
 const ARC_THICKNESS  = 8;   // ring thickness in pixels
 const ARC_START_ANGLE = -90; // 0deg = 3 o'clock, increasing clockwise -> -90 = 12 o'clock (top)
 
@@ -622,11 +622,11 @@ async function updateUI() {
         
         // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
-            await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x05, nextTextColor);
+            await sendThickText(engoRxCharacteristic, 230, 70, nextText, 0x05, nextTextColor);
         }
         
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
-        await sendThickText(engoRxCharacteristic, 220, 45, secText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 220, 45, secText, 0x05, COLOR_GREEN);
         
         await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
     } catch (bleWriteError) {
