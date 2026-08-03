@@ -442,11 +442,11 @@ async function updateUI() {
 
         // 1. Power Value (Custom 70px Font 0x04, Moved X to 130 to accommodate wider text)
         const powerText = `${currentPower}`;
-        let cmdPower = createActiveLookColorTextCmd(205, 160, powerText, powerText.length, 0x04, powerColor);
+        let cmdPower = createActiveLookColorTextCmd(200, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         // 2. Current Step Target Range (y=115, medium font 0x01, thick effect)
-        await sendThickText(engoRxCharacteristic, 200, 100, rangeText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 210, 100, rangeText, 0x05, COLOR_GREEN);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
         await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x05, nextTextColor);
@@ -454,4 +454,14 @@ async function updateUI() {
         // 4. Time & Distance Secondary line (y=45, medium font 0x01, default color, thick effect)
         const secText = `${currentDistance} mi | ${currentMovingTimeStr}`;
         await sendThickText(engoRxCharacteristic, 198, 45, secText, 0x02, COLOR_GREEN);
-       
+        
+        await engoRxCharacteristic.writeValueWithoutResponse(CMD_HOLD_FLUSH);
+    } catch (bleWriteError) {
+        debugLog("Warning: Frame drop - " + bleWriteError.message);
+    } finally {
+        isUpdatingHUD = false;
+    }
+}
+</script>
+</body>
+</html>
