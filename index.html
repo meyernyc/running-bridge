@@ -476,7 +476,7 @@ async function updateUI() {
     
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "  next - Workout Complete" : `next: ${stepInfo.nextText}`;
+    let nextText = isWorkoutFinished ? "      next - Done" : `next: ${stepInfo.nextText}`;
     let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
