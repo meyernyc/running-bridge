@@ -547,7 +547,12 @@ function processIncomingCP(event) {
 
 async function updateUI() {
     let stepInfo = getCurrentStepInfo();
-    let rangeText = `${stepInfo.min} - ${stepInfo.max}`;
+    
+    // Format the remaining time for the current step
+    let timeRemainingStr = formatTime(stepInfo.remaining);
+    
+    // Append the time remaining to the right of the target power
+    let rangeText = `${stepInfo.min} - ${stepInfo.max}w  ${timeRemainingStr}`;
     
     let isWorkoutFinished = stepInfo.nextText === "Done";
     let nextText = "";
@@ -605,11 +610,11 @@ async function updateUI() {
 
             // Set the color, then draw the arc — arcs (unlike the old gauge object)
             // actually respect whatever color was set right before them.
-//            await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(dynamicColor));
             await engoRxCharacteristic.writeValueWithoutResponse(createColorCmd(COLOR_GREEN));
             await engoRxCharacteristic.writeValueWithoutResponse(
                 createArcCmd(ARC_CENTER_X, ARC_CENTER_Y, ARC_RADIUS, sweepStartAngle, sweepEndAngle, ARC_THICKNESS)
-            );        }
+            );        
+        }
 
         const powerText = `${currentPower}`;
         let cmdPower = createActiveLookColorTextCmd(200, 185, powerText, powerText.length, 0x04, powerColor);
@@ -618,7 +623,7 @@ async function updateUI() {
         const paceText = `${currentPace} /mi`;
         await sendThickText(engoRxCharacteristic, 180, 215, paceText, 0x05, COLOR_GREEN);
         
-        await sendThickText(engoRxCharacteristic, 195, 115, rangeText, 0x05, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 230, 115, rangeText, 0x01, COLOR_GREEN);
         
         // Only send the next text command to HUD if it is populated
         if (nextText !== "") {
@@ -634,7 +639,6 @@ async function updateUI() {
     } finally {
         isUpdatingHUD = false;
     }
-}
-</script>
+}</script>
 </body>
 </html>
