@@ -559,10 +559,10 @@ async function updateUI() {
     
     // Only display next step text if remaining time is 1 minute (60000ms) or less
     if (stepInfo.remaining <= 60000) {
-        nextText = isWorkoutFinished ? "Done" : `${stepInfo.nextText}`;
+        nextText = isWorkoutFinished ? "        Done" : `${stepInfo.nextText}`;
     }
     
-    let nextTextColor = isWorkoutFinished ? COLOR_BRIGHT_RED : COLOR_GREEN ;
+    let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_DEFAULT_WHITE ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
