@@ -460,8 +460,8 @@ async function updateUI() {
     
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "        ------  Done  ------" : `next: ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_BRIGHT_RED ;
+    let nextText = isWorkoutFinished ? "   ------  Done  ------" : `next: ${stepInfo.nextText}`;
+    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_GREEN ;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
