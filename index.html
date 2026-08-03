@@ -411,8 +411,8 @@ async function updateUI() {
     
     // Determine if the workout is finished
     let isWorkoutFinished = stepInfo.nextText === "Done";
-    let nextText = isWorkoutFinished ? "Workout Finished" : `nxt ${stepInfo.nextText}`;
-    let nextTextColor = isWorkoutFinished ? COLOR_DEFAULT_WHITE : COLOR_BRIGHT_RED;
+    let nextText = isWorkoutFinished ? "Done" : `nxt ${stepInfo.nextText}`;
+    let nextTextColor = isWorkoutFinished ? COLOR_GREEN : COLOR_BRIGHT_RED;
 
     document.getElementById('view-pwr').innerText = `${currentPower} w`;
     document.getElementById('view-pce').innerText = currentPace;
@@ -436,17 +436,17 @@ async function updateUI() {
         
         if (isGaugeInitialized) {
             let percent = stepInfo.duration > 0 ? (stepInfo.remaining / stepInfo.duration) * 100 : 0;
-            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, powerColor));
+            await engoRxCharacteristic.writeValueWithoutResponse(createGaugeColorCmd(1, COLOR_GREEN));
             await engoRxCharacteristic.writeValueWithoutResponse(createGaugeDisplayCmd(1, percent));
         }
 
         // 1. Power Value (Custom 70px Font 0x04, Moved X to 130 to accommodate wider text)
-        const powerText = `${currentPower} w`;
-        let cmdPower = createActiveLookColorTextCmd(230, 160, powerText, powerText.length, 0x04, powerColor);
+        const powerText = `${currentPower}`;
+        let cmdPower = createActiveLookColorTextCmd(200, 160, powerText, powerText.length, 0x04, powerColor);
         await engoRxCharacteristic.writeValueWithoutResponse(cmdPower);
         
         // 2. Current Step Target Range (y=115, medium font 0x01, thick effect)
-        await sendThickText(engoRxCharacteristic, 210, 105, rangeText, 0x01, COLOR_GREEN);
+        await sendThickText(engoRxCharacteristic, 210, 100, rangeText, 0x01, COLOR_GREEN);
         
         // 3. Next Step Info line (Single line, small font 0x00, y=70, thick effect)
         await sendThickText(engoRxCharacteristic, 220, 70, nextText, 0x01, nextTextColor);
