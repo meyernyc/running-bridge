@@ -566,7 +566,7 @@ async function updateUI() {
         if (isGaugeInitialized) {
             let percent = 0;
             let countdownMs = stepInfo.countdownSec * 1000;
-            let dynamicColor = COLOR_DEFAULT_WHITE;
+            let dynamicColor = COLOR_GREEN;
 
             // Check if we are inside the user-defined countdown window at the end of a step
             if (countdownMs > 0 && stepInfo.remaining <= countdownMs && stepInfo.remaining > 0) {
